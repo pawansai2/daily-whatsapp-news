@@ -30,6 +30,7 @@
         "eslint-config-next": "latest",
         "jest": "latest",
         "postcss": "latest",
+        "supabase": "^2.111.0",
         "tailwindcss": "latest",
         "typescript": "latest"
     }
