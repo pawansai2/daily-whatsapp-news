@@ -71,7 +71,7 @@ export async function GET(request: Request) {
       [
         "owner_id",
         "digest_enabled",
-        "preferred_language",
+        "language",
         "country",
         "state",
         "district",

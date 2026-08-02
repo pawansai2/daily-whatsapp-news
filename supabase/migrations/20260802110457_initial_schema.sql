@@ -4,14 +4,15 @@ CREATE TABLE personal_settings (
     owner_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     phone_lookup_hash TEXT UNIQUE NOT NULL,
     encrypted_phone TEXT NOT NULL,
-    language TEXT NOT NULL DEFAULT 'en',
+    language TEXT NOT NULL DEFAULT 'en' CHECK (language IN ('en', 'hi', 'te', 'ta', 'kn')),
     country TEXT,
     state TEXT,
     district TEXT,
     city TEXT,
+    custom_keywords TEXT[] NOT NULL DEFAULT '{}'::TEXT[],
     timezone TEXT NOT NULL DEFAULT 'Asia/Kolkata',
-    delivery_time TEXT NOT NULL DEFAULT '08:00',
-    story_limit INTEGER NOT NULL DEFAULT 10,
+    delivery_time TEXT NOT NULL DEFAULT '08:00' CHECK (delivery_time ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'),
+    story_limit INTEGER NOT NULL DEFAULT 10 CHECK (story_limit BETWEEN 1 AND 20),
     digest_enabled BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
@@ -77,9 +78,44 @@ ALTER TABLE inbound_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pending_confirmations ENABLE ROW LEVEL SECURITY;
 
 -- Owner Policies
-CREATE POLICY "Owner access personal_settings" ON personal_settings FOR ALL USING (auth.uid() = owner_id);
-CREATE POLICY "Owner access personal_interests" ON personal_interests FOR ALL USING (auth.uid() = owner_id);
-CREATE POLICY "Owner access sent_article_hashes" ON sent_article_hashes FOR ALL USING (auth.uid() = owner_id);
-CREATE POLICY "Owner access deliveries" ON deliveries FOR ALL USING (auth.uid() = owner_id);
-CREATE POLICY "Owner access inbound_messages" ON inbound_messages FOR ALL USING (auth.uid() = owner_id);
-CREATE POLICY "Owner access pending_confirmations" ON pending_confirmations FOR ALL USING (auth.uid() = owner_id);
+CREATE POLICY "Owner access personal_settings"
+ON personal_settings
+FOR ALL
+TO authenticated
+USING ((SELECT auth.uid()) = owner_id)
+WITH CHECK ((SELECT auth.uid()) = owner_id);
+
+CREATE POLICY "Owner access personal_interests"
+ON personal_interests
+FOR ALL
+TO authenticated
+USING ((SELECT auth.uid()) = owner_id)
+WITH CHECK ((SELECT auth.uid()) = owner_id);
+
+CREATE POLICY "Owner access sent_article_hashes"
+ON sent_article_hashes
+FOR ALL
+TO authenticated
+USING ((SELECT auth.uid()) = owner_id)
+WITH CHECK ((SELECT auth.uid()) = owner_id);
+
+CREATE POLICY "Owner access deliveries"
+ON deliveries
+FOR ALL
+TO authenticated
+USING ((SELECT auth.uid()) = owner_id)
+WITH CHECK ((SELECT auth.uid()) = owner_id);
+
+CREATE POLICY "Owner access inbound_messages"
+ON inbound_messages
+FOR ALL
+TO authenticated
+USING ((SELECT auth.uid()) = owner_id)
+WITH CHECK ((SELECT auth.uid()) = owner_id);
+
+CREATE POLICY "Owner access pending_confirmations"
+ON pending_confirmations
+FOR ALL
+TO authenticated
+USING ((SELECT auth.uid()) = owner_id)
+WITH CHECK ((SELECT auth.uid()) = owner_id);
