@@ -1,14 +1,9 @@
-import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
-/*
- * This proxy currently performs no authentication.
- *
- * Real owner authorization must be implemented in the protected server
- * pages and mutation handlers. Do not treat this pass-through proxy as
- * an authentication boundary.
- */
-export function proxy() {
-  return NextResponse.next();
+import { updateSession } from "@/lib/supabase/proxy";
+
+export async function proxy(request: NextRequest) {
+  return updateSession(request);
 }
 
 export const config = {

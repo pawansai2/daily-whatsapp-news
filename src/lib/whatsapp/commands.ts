@@ -1,4 +1,4 @@
-import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { sendWhatsAppMessage } from '@/lib/whatsapp/client';
 
 export async function processInboundCommand(senderNumber: string, messageId: string, text: string) {

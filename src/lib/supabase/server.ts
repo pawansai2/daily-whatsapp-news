@@ -1,59 +1,31 @@
-import {
-  createClient,
-  type SupabaseClient,
-} from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
-let cachedAdminClient: SupabaseClient | null = null;
+export async function createClient() {
+  const cookieStore = await cookies();
 
-function requireServerEnvironmentVariable(name: string): string {
-  const value = process.env[name]?.trim();
-
-  if (!value) {
-    throw new Error(
-      `Missing required server environment variable: ${name}`,
-    );
-  }
-
-  return value;
-}
-
-export function hasSupabaseServerConfiguration(): boolean {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() &&
-      process.env.SUPABASE_SECRET_KEY?.trim(),
-  );
-}
-
-export function getSupabaseAdmin(): SupabaseClient {
-  if (cachedAdminClient) {
-    return cachedAdminClient;
-  }
-
-  const supabaseUrl = requireServerEnvironmentVariable(
-    "NEXT_PUBLIC_SUPABASE_URL",
-  );
-
-  const supabaseSecretKey = requireServerEnvironmentVariable(
-    "SUPABASE_SECRET_KEY",
-  );
-
-  cachedAdminClient = createClient(
-    supabaseUrl,
-    supabaseSecretKey,
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
-      auth: {
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-        persistSession: false,
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options);
+            });
+          } catch {
+            /*
+             * Server Components cannot always write cookies.
+             * Session refresh will be handled by src/proxy.ts.
+             */
+          }
+        },
       },
     },
   );
-
-  return cachedAdminClient;
 }
-
-/*
- * Temporary compatibility alias.
- * New code should call getSupabaseAdmin().
- */
-export const createAdminClient = getSupabaseAdmin;
