@@ -49,18 +49,11 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const ownerEmail =
-    process.env.OWNER_EMAIL?.trim().toLowerCase() ?? "";
-
-  const authenticatedOwner = Boolean(
-    user?.email &&
-      ownerEmail &&
-      user.email.toLowerCase() === ownerEmail,
-  );
+  const authenticatedUser = Boolean(user);
 
   const pathname = request.nextUrl.pathname;
 
-  if (isProtectedPath(pathname) && !authenticatedOwner) {
+  if (isProtectedPath(pathname) && !authenticatedUser) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.search = "";
@@ -74,7 +67,7 @@ export async function updateSession(request: NextRequest) {
     return redirectResponse;
   }
 
-  if (pathname === "/login" && authenticatedOwner) {
+  if (pathname === "/login" && authenticatedUser) {
     const dashboardUrl = request.nextUrl.clone();
     dashboardUrl.pathname = "/dashboard";
     dashboardUrl.search = "";

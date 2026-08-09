@@ -14,7 +14,7 @@ type SettingsPageProps = {
 
 const errorMessages: Record<string, string> = {
   invalid_phone:
-    "Enter a valid WhatsApp number including country code.",
+    "Enter a valid phone number including country code.",
   invalid_settings:
     "Check the entered settings and try again.",
   encryption_not_configured:
@@ -35,16 +35,6 @@ export default async function SettingsPage({
   } = await supabase.auth.getUser();
 
   if (userError || !user) {
-    redirect("/login");
-  }
-
-  const ownerEmail =
-    process.env.OWNER_EMAIL?.trim().toLowerCase() ?? "";
-
-  if (
-    !user.email ||
-    user.email.trim().toLowerCase() !== ownerEmail
-  ) {
     redirect("/login");
   }
 
@@ -106,8 +96,15 @@ export default async function SettingsPage({
       </h1>
 
       <p className="mt-2 text-gray-600">
-        Configure your WhatsApp daily news digest.
+        Configure your personal assistant preferences.
       </p>
+
+      <a
+        href="/settings/telegram"
+        className="mt-4 inline-block rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50"
+      >
+        Manage Telegram connection
+      </a>
 
       {params.saved === "all" ? (
         <div
@@ -145,14 +142,13 @@ export default async function SettingsPage({
             htmlFor="phone"
             className="block text-sm font-medium text-gray-700"
           >
-            WhatsApp number
+            Phone number (optional)
           </label>
 
           <input
             id="phone"
             name="phone"
             type="tel"
-            required
             defaultValue={currentPhone}
             placeholder="+919999999999"
             className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900"
@@ -292,7 +288,7 @@ export default async function SettingsPage({
           />
 
           <span className="text-sm font-medium text-gray-700">
-            Enable daily WhatsApp digest
+            Enable daily news digest
           </span>
         </label>
 

@@ -66,20 +66,6 @@ export async function saveSettings(
     redirect("/login");
   }
 
-  const ownerEmail =
-    process.env.OWNER_EMAIL?.trim().toLowerCase() ?? "";
-
-  const authenticatedEmail =
-    user.email?.trim().toLowerCase() ?? "";
-
-  if (
-    !ownerEmail ||
-    authenticatedEmail !== ownerEmail
-  ) {
-    await supabase.auth.signOut();
-    redirect("/login");
-  }
-
   const interests = parseList(
     readString(formData, "interests"),
   );
@@ -117,28 +103,35 @@ export async function saveSettings(
     redirectToSettings("error=invalid_settings");
   }
 
-  if (!validation.data.phone) {
-    redirectToSettings("error=invalid_phone");
-  }
+  let phoneLookupHash: string | null = null;
+  let encryptedPhone: string | null = null;
 
-  let normalizedPhone: string;
+  if (validation.data.phone) {
+    let normalizedPhone: string;
 
-  try {
-    normalizedPhone =
-      parsePhoneNumberWithError(
-        validation.data.phone,
-      ).number;
-  } catch {
-    redirectToSettings("error=invalid_phone");
-  }
+    try {
+      normalizedPhone =
+        parsePhoneNumberWithError(
+          validation.data.phone,
+        ).number;
+    } catch {
+      redirectToSettings("error=invalid_phone");
+    }
 
-  const encryptionKey =
-    process.env.PHONE_ENCRYPTION_KEY ?? "";
+    const encryptionKey =
+      process.env.PHONE_ENCRYPTION_KEY ?? "";
 
-  if (encryptionKey.length !== 32) {
-    redirectToSettings(
-      "error=encryption_not_configured",
-    );
+    if (encryptionKey.length !== 32) {
+      redirectToSettings(
+        "error=encryption_not_configured",
+      );
+    }
+
+    phoneLookupHash =
+      hashPhone(normalizedPhone);
+
+    encryptedPhone =
+      encryptPhone(normalizedPhone);
   }
 
   const { error: settingsError } = await supabase
@@ -146,8 +139,10 @@ export async function saveSettings(
     .upsert(
       {
         owner_id: user.id,
-        phone_lookup_hash: hashPhone(normalizedPhone),
-        encrypted_phone: encryptPhone(normalizedPhone),
+        phone_lookup_hash:
+          phoneLookupHash,
+        encrypted_phone:
+          encryptedPhone,
         language: validation.data.language ?? "en",
         custom_keywords:
           validation.data.custom_keywords ?? [],

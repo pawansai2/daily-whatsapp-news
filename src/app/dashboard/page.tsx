@@ -136,23 +136,6 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
-  const ownerEmail =
-    process.env.OWNER_EMAIL
-      ?.trim()
-      .toLowerCase() ?? "";
-
-  const authenticatedEmail =
-    user.email
-      ?.trim()
-      .toLowerCase() ?? "";
-
-  if (
-    !ownerEmail ||
-    authenticatedEmail !== ownerEmail
-  ) {
-    redirect("/login");
-  }
-
   const {
     data: settings,
     error: settingsError,

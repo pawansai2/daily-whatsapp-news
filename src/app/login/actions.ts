@@ -22,14 +22,7 @@ export async function login(formData: FormData) {
       ? passwordValue
       : "";
 
-  const ownerEmail =
-    process.env.OWNER_EMAIL?.trim().toLowerCase() ?? "";
-
-  if (!ownerEmail) {
-    redirectToLogin("configuration_error");
-  }
-
-  if (!email || !password || email !== ownerEmail) {
+  if (!email || !password) {
     redirectToLogin("invalid_credentials");
   }
 
@@ -41,10 +34,7 @@ export async function login(formData: FormData) {
       password,
     });
 
-  const authenticatedEmail =
-    data.user?.email?.trim().toLowerCase() ?? "";
-
-  if (error || authenticatedEmail !== ownerEmail) {
+  if (error || !data.user) {
     await supabase.auth.signOut();
     redirectToLogin("invalid_credentials");
   }
