@@ -3,6 +3,9 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { decryptPhone } from "@/lib/utils/crypto";
 
+import { AppNav } from "@/components/AppNav";
+import { SettingsSaveButton } from "@/components/SettingsSaveButton";
+
 import { saveSettings } from "./actions";
 
 type SettingsPageProps = {
@@ -30,11 +33,14 @@ export default async function SettingsPage({
   const supabase = await createClient();
 
   const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+    data: claimsData,
+    error: claimsError,
+  } = await supabase.auth.getClaims();
 
-  if (userError || !user) {
+  const userId =
+    claimsData?.claims?.sub;
+
+  if (claimsError || !userId) {
     redirect("/login");
   }
 
@@ -47,13 +53,13 @@ export default async function SettingsPage({
       .select(
         "encrypted_phone, language, custom_keywords, timezone, delivery_time, story_limit, digest_enabled",
       )
-      .eq("owner_id", user.id)
+      .eq("owner_id", userId)
       .maybeSingle(),
 
     supabase
       .from("personal_interests")
       .select("display_name")
-      .eq("owner_id", user.id)
+      .eq("owner_id", userId)
       .order("created_at", {
         ascending: true,
       }),
@@ -90,7 +96,10 @@ export default async function SettingsPage({
     : undefined;
 
   return (
-    <main className="mx-auto max-w-3xl p-8">
+    <>
+      <AppNav />
+
+      <main className="mx-auto max-w-3xl p-8">
       <h1 className="text-3xl font-bold text-gray-900">
         Personal Settings
       </h1>
@@ -292,13 +301,9 @@ export default async function SettingsPage({
           </span>
         </label>
 
-        <button
-          type="submit"
-          className="rounded-md bg-blue-600 px-5 py-2 font-medium text-white hover:bg-blue-700"
-        >
-          Save all settings
-        </button>
+        <SettingsSaveButton />
       </form>
-    </main>
+      </main>
+    </>
   );
 }

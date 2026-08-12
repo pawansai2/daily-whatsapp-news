@@ -1,3 +1,5 @@
+import { LoginSubmitButton } from "@/components/LoginSubmitButton";
+
 import { login } from "./actions";
 
 type LoginPageProps = {
@@ -76,12 +78,7 @@ export default async function LoginPage({
             />
           </div>
 
-          <button
-            type="submit"
-            className="w-full rounded-md bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700"
-          >
-            Sign in
-          </button>
+          <LoginSubmitButton />
         </form>
       </section>
     </main>

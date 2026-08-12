@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { AppNav } from "@/components/AppNav";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -128,24 +129,44 @@ export default async function DashboardPage() {
     await createClient();
 
   const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+    data: claimsData,
+    error: claimsError,
+  } = await supabase.auth.getClaims();
 
-  if (userError || !user) {
+  const userId =
+    claimsData?.claims?.sub;
+
+  if (claimsError || !userId) {
     redirect("/login");
   }
 
-  const {
-    data: settings,
-    error: settingsError,
-  } = await supabase
-    .from("personal_settings")
-    .select(
-      "digest_enabled, delivery_time, timezone",
-    )
-    .eq("owner_id", user.id)
-    .maybeSingle();
+  const [
+    {
+      data: settings,
+      error: settingsError,
+    },
+    {
+      data: telegramChannel,
+      error: telegramError,
+    },
+  ] = await Promise.all([
+    supabase
+      .from("personal_settings")
+      .select(
+        "digest_enabled, delivery_time, timezone",
+      )
+      .eq("owner_id", userId)
+      .maybeSingle(),
+
+    supabase
+      .from("user_channels")
+      .select(
+        "username, verified_at, is_active",
+      )
+      .eq("user_id", userId)
+      .eq("channel", "telegram")
+      .maybeSingle(),
+  ]);
 
   if (settingsError) {
     console.error(
@@ -159,13 +180,22 @@ export default async function DashboardPage() {
   const digestEnabled =
     settings?.digest_enabled ?? false;
 
+  const telegramConnected =
+    Boolean(
+      telegramChannel?.is_active &&
+        telegramChannel?.verified_at,
+    );
+
   const nextDelivery =
     settings
       ? getNextDeliveryLabel(settings)
       : "Configure settings first";
 
   return (
-    <main className="min-h-screen bg-gray-50 p-8">
+    <>
+      <AppNav />
+
+      <main className="min-h-screen bg-gray-50 p-8">
       <div className="mx-auto max-w-6xl">
         <h1 className="text-4xl font-bold text-gray-900">
           Dashboard
@@ -189,9 +219,35 @@ export default async function DashboardPage() {
                 : "Paused"}
             </p>
 
-            <p className="mt-2 text-sm text-gray-500">
-              Delivery channel: Telegram
-            </p>
+            <div className="mt-4">
+              <p
+                className={`font-medium ${
+                  telegramConnected
+                    ? "text-green-700"
+                    : "text-amber-700"
+                }`}
+              >
+                {telegramConnected
+                  ? "Telegram connected"
+                  : "Telegram not connected"}
+              </p>
+
+              {telegramConnected &&
+              telegramChannel?.username ? (
+                <p className="mt-1 text-sm text-gray-500">
+                  @{telegramChannel.username}
+                </p>
+              ) : null}
+
+              <Link
+                href="/settings/telegram"
+                className="mt-3 inline-block text-sm font-medium text-blue-700 hover:underline"
+              >
+                {telegramConnected
+                  ? "Manage Telegram"
+                  : "Connect Telegram"}
+              </Link>
+            </div>
           </section>
 
           <section className="rounded-lg border border-gray-200 bg-white p-8 shadow-sm">
@@ -211,12 +267,12 @@ export default async function DashboardPage() {
           </section>
         </div>
 
-        {settingsError ? (
+        {settingsError || telegramError ? (
           <div
             role="alert"
             className="mt-6 rounded-md border border-red-200 bg-red-50 p-3 text-red-700"
           >
-            Dashboard settings could not be loaded.
+            Some dashboard information could not be loaded.
           </div>
         ) : null}
 
@@ -236,6 +292,7 @@ export default async function DashboardPage() {
           </Link>
         </div>
       </div>
-    </main>
+      </main>
+    </>
   );
 }

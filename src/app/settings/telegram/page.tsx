@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { AppNav } from "@/components/AppNav";
 import { createClient } from "@/lib/supabase/server";
 
 import TelegramLinkClient from "./TelegramLinkClient";
@@ -12,11 +13,14 @@ export default async function TelegramSettingsPage() {
     await createClient();
 
   const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+    data: claimsData,
+    error: claimsError,
+  } = await supabase.auth.getClaims();
 
-  if (userError || !user) {
+  const userId =
+    claimsData?.claims?.sub;
+
+  if (claimsError || !userId) {
     redirect("/login");
   }
 
@@ -28,14 +32,8 @@ export default async function TelegramSettingsPage() {
     .select(
       "username, verified_at, is_active",
     )
-    .eq(
-      "user_id",
-      user.id,
-    )
-    .eq(
-      "channel",
-      "telegram",
-    )
+    .eq("user_id", userId)
+    .eq("channel", "telegram")
     .maybeSingle();
 
   if (channelError) {
@@ -54,33 +52,44 @@ export default async function TelegramSettingsPage() {
     );
 
   return (
-    <main className="mx-auto max-w-3xl p-8">
-      <Link
-        href="/settings"
-        className="text-sm font-medium text-gray-600 hover:text-gray-900"
-      >
-        ← Back to settings
-      </Link>
+    <>
+      <AppNav />
 
-      <h1 className="mt-4 text-3xl font-bold text-gray-900">
-        Telegram Connection
-      </h1>
+      <main className="mx-auto max-w-3xl p-8">
+        <Link
+          href="/settings"
+          className="text-sm font-medium text-gray-600 hover:text-gray-900"
+        >
+          Back to Settings
+        </Link>
 
-      <p className="mt-2 text-gray-600">
-        Link this account to your Telegram chat so reminders and updates can be delivered privately to you.
-      </p>
+        <h1 className="mt-5 text-3xl font-bold text-gray-900">
+          Telegram Connection
+        </h1>
 
-      <div className="mt-8">
-        <TelegramLinkClient
-          connected={connected}
-          username={
-            typeof channel?.username ===
-            "string"
-              ? channel.username
-              : null
-          }
-        />
-      </div>
-    </main>
+        <p className="mt-2 text-gray-600">
+          Connect your Telegram account to receive Daily Intelligence notifications and control your assistant.
+        </p>
+
+        {channelError ? (
+          <div
+            role="alert"
+            className="mt-6 rounded-md border border-red-200 bg-red-50 p-3 text-red-700"
+          >
+            Telegram connection status could not be loaded.
+          </div>
+        ) : null}
+
+        <div className="mt-8">
+          <TelegramLinkClient
+            connected={connected}
+            username={
+              channel?.username ??
+              null
+            }
+          />
+        </div>
+      </main>
+    </>
   );
 }

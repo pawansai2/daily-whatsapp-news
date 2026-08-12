@@ -47,11 +47,14 @@ export async function POST() {
     await createClient();
 
   const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+    data: claimsData,
+    error: claimsError,
+  } = await supabase.auth.getClaims();
 
-  if (userError || !user) {
+  const userId =
+    claimsData?.claims?.sub;
+
+  if (claimsError || !userId) {
     return NextResponse.json(
       {
         error: "Authentication required.",
@@ -75,7 +78,7 @@ export async function POST() {
   } = await admin
     .from("telegram_link_tokens")
     .delete()
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .is("used_at", null);
 
   if (cleanupError) {
@@ -112,7 +115,7 @@ export async function POST() {
   } = await admin
     .from("telegram_link_tokens")
     .insert({
-      user_id: user.id,
+      user_id: userId,
       token_hash:
         hashLinkCode(code),
       expires_at: expiresAt,

@@ -58,11 +58,14 @@ export async function saveSettings(
   const supabase = await createClient();
 
   const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+    data: claimsData,
+    error: claimsError,
+  } = await supabase.auth.getClaims();
 
-  if (userError || !user) {
+  const userId =
+    claimsData?.claims?.sub;
+
+  if (claimsError || !userId) {
     redirect("/login");
   }
 
@@ -138,7 +141,7 @@ export async function saveSettings(
     .from("personal_settings")
     .upsert(
       {
-        owner_id: user.id,
+        owner_id: userId,
         phone_lookup_hash:
           phoneLookupHash,
         encrypted_phone:
@@ -173,7 +176,7 @@ export async function saveSettings(
     await supabase
       .from("personal_interests")
       .delete()
-      .eq("owner_id", user.id);
+      .eq("owner_id", userId);
 
   if (deleteInterestsError) {
     console.error("interests_delete_failed", {
@@ -185,7 +188,7 @@ export async function saveSettings(
 
   const interestRows = interests
     .map((displayName) => ({
-      owner_id: user.id,
+      owner_id: userId,
       normalized_slug: createSlug(displayName),
       display_name: displayName,
       interest_type: "custom",

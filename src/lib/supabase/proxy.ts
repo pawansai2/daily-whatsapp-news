@@ -46,10 +46,13 @@ export async function updateSession(request: NextRequest) {
   );
 
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: claimsData,
+  } = await supabase.auth.getClaims();
 
-  const authenticatedUser = Boolean(user);
+  const authenticatedUser =
+    Boolean(
+      claimsData?.claims?.sub,
+    );
 
   const pathname = request.nextUrl.pathname;
 
