@@ -15,11 +15,16 @@
         "@supabase/ssr": "^0.12.4",
         "@supabase/supabase-js": "latest",
         "fast-xml-parser": "latest",
+        "firebase": "^13.2.0",
+        "firebase-admin": "^14.5.0",
         "libphonenumber-js": "latest",
         "next": "latest",
         "react": "latest",
         "react-dom": "latest",
         "zod": "latest"
+    },
+    "overrides": {
+        "@grpc/grpc-js": "^1.14.7"
     },
     "devDependencies": {
         "@tailwindcss/postcss": "^4.3.3",
