@@ -25,7 +25,12 @@ it into chat. Its project ID must match `NEXT_PUBLIC_FIREBASE_PROJECT_ID`.
 
 Email/Password Authentication must be enabled in Firebase Authentication.
 Server-side app requests require the Admin credential to verify session
-cookies; login will not complete if that credential is unavailable.
+cookies; login will not complete if that credential is unavailable. Set
+`OWNER_EMAIL` or `OWNER_UID` in the deployment environment to authorize the
+owner account. `OWNER_EMAIL` accepts a comma-separated list of email addresses;
+`OWNER_UID` accepts a comma-separated list of Firebase user IDs. At least one
+must match the signed-in Firebase account, or the session endpoint rejects
+login.
 Set `OPPORTUNITY_REVIEWER_EMAILS` to a comma-separated list of reviewer
 emails for the evidence-review page. `OPPORTUNITY_REVIEWER_IDS` may still be
 used when it contains current Firebase UIDs.

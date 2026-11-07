@@ -41,22 +41,54 @@ export function FirebaseLoginForm({
       });
 
       if (!response.ok) {
+        const responseBody = response.headers
+          .get("content-type")
+          ?.includes("application/json")
+          ? await response.json() as { error?: unknown }
+          : null;
+        const serverError =
+          responseBody && typeof responseBody.error === "string"
+            ? responseBody.error
+            : "";
+
         await signOut(auth);
-        setErrorMessage(
-          "Firebase sign-in could not be completed. Check the server configuration and try again.",
-        );
+        if (serverError === "This account is not authorized for this deployment.") {
+          setErrorMessage(
+            "Firebase accepted your credentials, but this account is not authorized for the app. Set OWNER_EMAIL or OWNER_UID in the deployment environment, then redeploy.",
+          );
+        } else if (serverError === "Request origin is not allowed.") {
+          setErrorMessage(
+            "The sign-in request was rejected because of its origin. Check the deployment URL and allowed-origin configuration.",
+          );
+        } else {
+          console.error("firebase_session_exchange_failed", {
+            status: response.status,
+          });
+          setErrorMessage(
+            "Firebase accepted your credentials, but the server could not create a session. Check the Firebase Admin configuration and try again.",
+          );
+        }
         return;
       }
 
       window.location.assign("/dashboard");
     } catch (error) {
       console.error("firebase_login_failed", {
-        code:
-          error && typeof error === "object" && "code" in error
-            ? String(error.code)
-            : "unknown",
+        code: error && typeof error === "object" && "code" in error
+          ? String(error.code)
+          : "unknown",
       });
-      setErrorMessage("Invalid email or password.");
+      const code =
+        error && typeof error === "object" && "code" in error
+          ? String(error.code)
+          : "";
+      setErrorMessage(
+        code === "auth/invalid-credential" ||
+          code === "auth/user-not-found" ||
+          code === "auth/wrong-password"
+          ? "Invalid email or password."
+          : "Could not reach Firebase Authentication. Check the Firebase project configuration and try again.",
+      );
     } finally {
       setPending(false);
     }

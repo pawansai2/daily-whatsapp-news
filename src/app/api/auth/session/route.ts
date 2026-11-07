@@ -22,7 +22,10 @@ function isSameOrigin(request: Request): boolean {
 
 export async function POST(request: Request) {
   if (!isSameOrigin(request)) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 403 });
+    return NextResponse.json(
+      { error: "Request origin is not allowed." },
+      { status: 403 },
+    );
   }
 
   let body: { idToken?: unknown };
@@ -65,8 +68,8 @@ export async function POST(request: Request) {
       message: error instanceof Error ? error.message : "unknown",
     });
     return NextResponse.json(
-      { error: "Firebase sign-in could not be completed." },
-      { status: 401 },
+      { error: "Firebase server authentication failed." },
+      { status: 500 },
     );
   }
 }
