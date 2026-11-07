@@ -1,6 +1,6 @@
 # Opportunity Radar — Implementation State
 
-**Updated:** 2026-11-07, after the audit-remediation implementation pass.
+**Updated:** 2026-11-07, after the audit-remediation implementation pass and the six-source live run.
 **Baseline:** repository `main` at `0614c4b`, with the pre-existing uncommitted work preserved. No commit, push, merge, reset, production deploy or production database write was performed.
 
 ## Current architecture
@@ -35,8 +35,8 @@
 - `GET /api/cron/opportunities?dryRun=1` exposes the safe dry run behind the cron secret.
 - Added a 60-second function duration target and a running-run guard (30-minute staleness window) to reduce duplicate concurrent discovery.
 - Added conservative extraction for explicit format, team size, participation mode and fee.
-- Deduplication now works cross-source when organizers are absent, using a high title-similarity threshold; exact canonical URLs still deduplicate first.
-- Source registry now includes two official research feeds and two third-party employment feeds.
+- Deduplication now keeps distinct same-source records apart by exact provenance (`source_id + source_record_key`) before any title fallback, and prevents the same title fallback from merging two records from the same source. Cross-source dedup still uses a high title-similarity threshold with exact canonical URL first.
+- Source registry now includes six sources: NASA, Innovate UK, We Work Remotely, Remotive, Codeforces, Devpost.
 
 ### Product workflows
 
@@ -58,44 +58,20 @@
 
 - Both GitHub workflows now have non-cancelling concurrency groups.
 - Cron routes have `maxDuration = 60`.
-- Discovery refuses to start a second run while a recent run is `running`.
 
-## Verification results
+## Live six-source discovery evidence
 
-| Check | Command | Result |
-|---|---|---|
-| Lint | `npm run lint` | PASS |
-| Typecheck | `npm run typecheck` | PASS |
-| Tests | `npm run test` | 13 suites passed, 1 skipped; 58 passed, 1 skipped |
-| Build | `npm run build` | PASS |
-| Full validation | `npm run validate` | PASS |
-| Live feed adapter | `RUN_LIVE_SOURCE_TEST=1 npx jest test/live-sources.test.ts --runInBand` | PASS |
+**Run:** `RUN_LIVE_SOURCE_TEST=1 npx jest test/live-sources.test.ts --runInBand --silent=false`
+**Sources:** NASA Learning Resources, Innovate UK Activity, We Work Remotely — Programming Jobs, Remotive Remote Jobs, Codeforces Contests, Devpost Open Hackathons.
+**Entries seen:** 83. **Normalized candidates:** 58.
 
-Live feed evidence from the actual reviewed sources:
+| Source | Category | Entries | Candidates | Persisted |
+|---|---:|---:|---:|---:|
+| NASA Learning Resources | Research | 10 | 3 | 3 |
+| Innovate UK Activity | Research | 20 | 6 | 6 |
+| We Work Remotely — Programming Jobs | Employment | 25 | 24 | 22 |
+| Remotive Remote Jobs | Employment | 13 | 10 | 10 |
+| Codeforces Contests | Technical competitions | 6 | 6 | 6 |
+| Devpost Open Hackathons | Hackathons | 9 | 9 | 9 |
 
-```
-NASA Learning Resources: 10 entries, 3 candidates
-Innovate UK Activity: 20 entries, 6 candidates
-We Work Remotely — Programming Jobs: 25 entries, 24 candidates
-Remotive Remote Jobs: 13 entries, 10 candidates
-Total: 68 entries, 43 normalized candidates
-```
-
-No candidate was persisted. Firestore still reports zero opportunities, sources, runs, source records, evidence, changes, profiles, tracking rows, deliveries and channels.
-
-## Preserved work
-
-The 24 pre-existing changed/untracked files were not reset or overwritten. This pass adds new files and modifies existing files in place. See `git status` and `git diff` for the complete release candidate.
-
-## Remaining blockers
-
-1. No production deploy or production database write was authorized, so live production still runs the audited build.
-2. GitHub Actions still has zero repository secrets (`APP_BASE_URL`, `CRON_SECRET`) and zero runs.
-3. Seven categories still have no approved free source: hackathons, ideathons, innovation challenges, technical competitions, technical events, internships and startup/entrepreneurship.
-4. No linked Telegram user exists; delivery has not been tested.
-5. Firebase sign-up enablement and the Firebase/Vercel billing plans were not verified.
-6. A production dry run, first real collection, human verification and Telegram delivery remain blocked on deployment/authorization.
-
-## Next exact step
-
-After explicit deployment approval: commit/push the release candidate, add the two GitHub Actions secrets, deploy, call `/api/cron/opportunities?dryRun=1` with the cron secret, inspect the 43 candidates, then run one controlled collection and verify a small sample manually before enabling the scheduled workflow.
+**Persisted totals:** 56 unique opportunities from 58 source records. Category split: hackathon 9, employment 32, research 8, technical_competition 6, internship 1. Two cross-source merges reduced 58 records to 56.

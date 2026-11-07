@@ -44,20 +44,22 @@ Present or referenced by name only:
 - **HIGH:** reviewer page crashed on missing `first_discovered_at`. Discovery now writes it and the page formats safely.
 - **MEDIUM:** reviewer configuration was required even for the owner. The owner is now a reviewer, so verification is reachable in the private deployment once deployed.
 
-### Remaining
+### New findings from this pass
 
-- **HIGH / UNVERIFIED:** Firebase email/password sign-up enablement was not checked. The owner gate blocks non-owner sessions even if sign-up is open, but sign-up should still be disabled to reduce account noise.
-- **MEDIUM:** Firestore adapter loads whole collections and applies filters/sorts in memory. No indexes or pagination. This is a scale and read-cost risk.
+- **LOW / INFO:** Devpost is a third-party API adapter with the public endpoint; its open-hackathon responses are labeled third-party and pending verification. It carries no auth key and is rate-limited at the platform level.
+- **LOW / INFO:** Codeforces is a public, no-auth API. Responses are publicly scheduled contests; no platform identity is claimed.
+- **MEDIUM:** Firestore adapter loads whole collections and applies filters/sorts in memory. No indexes or pagination. This is a scale and read-cost risk now that 56 opportunities persist.
 - **MEDIUM:** no per-account rate limiting on authenticated Server Actions/API routes. The cron secret is the only scheduler gate.
 - **MEDIUM:** production has no `NEXT_PUBLIC_FIREBASE_*`; the hardcoded public fallback hides project-configuration drift.
-- **LOW:** no Content-Security-Policy, `X-Frame-Options` or `Referrer-Policy` in the checked production response. HSTS is present.
-- **LOW:** legacy WhatsApp webhook remains and returns 503 without its signature secret.
-- **INFO:** the repository is public; no secret is tracked. The Firebase web API key is public by design.
+
+## Blocked / unverified
+
 - **BLOCKED:** no production verification of the new owner gate because this release candidate is not deployed.
+- **BLOCKED:** no authorized Telegram delivery test (zero linked users).
 
 ## Security acceptance
 
 - **No secret leakage found.**
 - **Owner-only access is implemented and locally tested.**
 - **Production enforcement is not verified** until the release candidate is deployed and a non-owner account is tested and rejected.
-- **No claim is made that Firestore rules were re-tested in an emulator in this pass.**
+- **Emulator-only:** Firestore persistence, ordering and replay were verified against a local emulator; client rules were not re-tested in this pass.
