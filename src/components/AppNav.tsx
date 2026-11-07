@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { LogoutButton } from "./LogoutButton";
+
 export function AppNav() {
   return (
     <nav
@@ -19,6 +21,13 @@ export function AppNav() {
           className="rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
         >
           Dashboard
+        </Link>
+
+        <Link
+          href="/opportunities"
+          className="rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+        >
+          Opportunities
         </Link>
 
         <Link
@@ -43,11 +52,20 @@ export function AppNav() {
         </Link>
 
         <Link
+          href="/settings/opportunities"
+          className="rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+        >
+          Eligibility profile
+        </Link>
+
+        <Link
           href="/settings"
           className="rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
         >
           Settings
         </Link>
+
+        <LogoutButton />
       </div>
     </nav>
   );

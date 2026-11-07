@@ -1,19 +1,19 @@
 import { NextResponse } from "next/server";
 
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { disconnectTelegramUser } from "@/lib/firebase/telegram";
+import { createClient } from "@/lib/firebase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST() {
-  const supabase =
+  const firebaseStore =
     await createClient();
 
   const {
     data: claimsData,
     error: claimsError,
-  } = await supabase.auth.getClaims();
+  } = await firebaseStore.auth.getClaims();
 
   const userId =
     claimsData?.claims?.sub;
@@ -29,29 +29,14 @@ export async function POST() {
     );
   }
 
-  const admin =
-    getSupabaseAdmin();
-
-  const {
-    error: channelError,
-  } = await admin
-    .from("user_channels")
-    .update({
-      external_chat_id: null,
-      username: null,
-      verified_at: null,
-      is_active: false,
-      updated_at:
-        new Date().toISOString(),
-    })
-    .eq("user_id", userId)
-    .eq("channel", "telegram");
-
-  if (channelError) {
+  try {
+    await disconnectTelegramUser(userId);
+  } catch (error) {
     console.error(
       "telegram_disconnect_failed",
       {
-        code: channelError.code,
+        message:
+          error instanceof Error ? error.message : "unknown",
       },
     );
 
@@ -62,27 +47,6 @@ export async function POST() {
       },
       {
         status: 500,
-      },
-    );
-  }
-
-  /*
-   * A disconnected account must not retain a
-   * previously generated usable connection code.
-   */
-  const {
-    error: tokenError,
-  } = await admin
-    .from("telegram_link_tokens")
-    .delete()
-    .eq("user_id", userId)
-    .is("used_at", null);
-
-  if (tokenError) {
-    console.error(
-      "telegram_disconnect_token_cleanup_failed",
-      {
-        code: tokenError.code,
       },
     );
   }

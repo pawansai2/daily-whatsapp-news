@@ -1,8 +1,8 @@
 import crypto from "crypto";
 import { NextResponse } from "next/server";
 
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { getFirebaseAdminClient } from "@/lib/firebase/store";
+import { createClient } from "@/lib/firebase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,13 +43,13 @@ function hashLinkCode(
 }
 
 export async function POST() {
-  const supabase =
+  const firebaseStore =
     await createClient();
 
   const {
     data: claimsData,
     error: claimsError,
-  } = await supabase.auth.getClaims();
+  } = await firebaseStore.auth.getClaims();
 
   const userId =
     claimsData?.claims?.sub;
@@ -66,7 +66,7 @@ export async function POST() {
   }
 
   const admin =
-    getSupabaseAdmin();
+    getFirebaseAdminClient();
 
   /*
    * Only one unused link code is needed at a time.

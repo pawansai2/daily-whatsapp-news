@@ -1,13 +1,13 @@
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { getFirebaseAdminClient } from "@/lib/firebase/store";
 import { sendWhatsAppMessage } from '@/lib/whatsapp/client';
 
 export async function processInboundCommand(senderNumber: string, messageId: string, text: string) {
-    const supabaseAdmin = getSupabaseAdmin();
+    const firebaseAdmin = getFirebaseAdminClient();
     void messageId;
     const command = text.trim().toUpperCase();
 
     // Find owner
-    const { data: settings } = await supabaseAdmin
+    const { data: settings } = await firebaseAdmin
         .from('personal_settings')
         .select('*');
 
@@ -21,13 +21,13 @@ export async function processInboundCommand(senderNumber: string, messageId: str
     }
 
     if (command === 'PAUSE') {
-        await supabaseAdmin.from('personal_settings').update({ digest_enabled: false }).eq('owner_id', ownerSettings.owner_id);
+        await firebaseAdmin.from('personal_settings').update({ digest_enabled: false }).eq('owner_id', ownerSettings.owner_id);
         await sendWhatsAppMessage(senderNumber, 'Digest paused.');
         return;
     }
 
     if (command === 'RESUME') {
-        await supabaseAdmin.from('personal_settings').update({ digest_enabled: true }).eq('owner_id', ownerSettings.owner_id);
+        await firebaseAdmin.from('personal_settings').update({ digest_enabled: true }).eq('owner_id', ownerSettings.owner_id);
         await sendWhatsAppMessage(senderNumber, 'Digest resumed.');
         return;
     }
@@ -45,7 +45,7 @@ export async function processInboundCommand(senderNumber: string, messageId: str
         const payload = { values: values.split(',').map(v => v.trim()) };
         const expiresAt = new Date(Date.now() + 15 * 60000).toISOString(); // 15 mins
 
-        await supabaseAdmin.from('pending_confirmations').insert({
+        await firebaseAdmin.from('pending_confirmations').insert({
             owner_id: ownerSettings.owner_id,
             sender_hash: senderNumber, // Should be hashed securely
             operation_type: 'REPLACE_INTERESTS',

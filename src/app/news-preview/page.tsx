@@ -2,18 +2,18 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { AppNav } from "@/components/AppNav";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/firebase/server";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewsPreviewPage() {
-  const supabase =
+  const firebaseStore =
     await createClient();
 
   const {
     data: claimsData,
     error: claimsError,
-  } = await supabase.auth.getClaims();
+  } = await firebaseStore.auth.getClaims();
 
   const userId =
     claimsData?.claims?.sub;
@@ -32,7 +32,7 @@ export default async function NewsPreviewPage() {
       error: interestsError,
     },
   ] = await Promise.all([
-    supabase
+    firebaseStore
       .from("personal_settings")
       .select(
         "language, custom_keywords, timezone, delivery_time, story_limit, digest_enabled",
@@ -40,7 +40,7 @@ export default async function NewsPreviewPage() {
       .eq("owner_id", userId)
       .maybeSingle(),
 
-    supabase
+    firebaseStore
       .from("personal_interests")
       .select("display_name")
       .eq("owner_id", userId)

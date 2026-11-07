@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { AppNav } from "@/components/AppNav";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/firebase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -54,13 +54,13 @@ function formatDateTime(
 }
 
 export default async function HistoryPage() {
-  const supabase =
+  const firebaseStore =
     await createClient();
 
   const {
     data: claimsData,
     error: claimsError,
-  } = await supabase.auth.getClaims();
+  } = await firebaseStore.auth.getClaims();
 
   const userId =
     claimsData?.claims?.sub;
@@ -78,7 +78,7 @@ export default async function HistoryPage() {
       data: settings,
     },
   ] = await Promise.all([
-    supabase
+    firebaseStore
       .from("deliveries")
       .select("*")
       .eq("owner_id", userId)
@@ -88,7 +88,7 @@ export default async function HistoryPage() {
       })
       .limit(50),
 
-    supabase
+    firebaseStore
       .from("personal_settings")
       .select("timezone")
       .eq("owner_id", userId)

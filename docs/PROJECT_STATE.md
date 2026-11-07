@@ -1,52 +1,44 @@
 # Project State
 
-## Completed Blocks
-- Block A: Authentication, settings schema, and database models implemented. Supabase client factories rewritten safely.
-- Block B: News pipeline (RSS fallback + Mock), AI isolation, WhatsApp webhook replay protection, commands parser, and cron pipeline implemented.
-- Block C: Tests written for Unit, Integration, and Security scenarios. Documentation updated.
+## Current implementation
 
-## Partial Features
-- Test suite created but cannot be executed in current environment.
+- Firebase Authentication is wired into the login form and HTTP-only session
+  cookie flow.
+- Protected pages, server actions, and user API routes verify the Firebase
+  session; Firestore access is server-side through the Firebase Admin SDK.
+- News settings, delivery history, Telegram linking, and Opportunity Radar
+  persistence use Firestore collections.
+- Firestore client rules remain deny-all.
+- `scripts/migrate-supabase-to-firestore.mjs` provides a dry-run-first,
+  non-destructive import that maps Supabase user IDs to existing Firebase UIDs
+  by email and verifies imported records.
+- Supabase schema files remain as historical source definitions until data
+  migration and production verification are complete.
 
-## Blocked Live Integrations
-- All integrations (Supabase, Meta, Vercel, Cron)
+## Not yet complete
 
-## Files Created/Modified
-- src/lib/schema/settings.ts
-- src/lib/supabase/client.ts
-- src/lib/supabase/server.ts
-- src/middleware.ts
-- src/lib/news/provider.ts
-- src/lib/whatsapp/commands.ts
-- test/unit.test.ts
-- test/integration.test.ts
-- test/security.test.ts
-- docs/*
+- The Supabase-to-Firestore data import has not run.
+- Local Firebase Admin configuration was not present at the last environment
+  check, so live Firebase Auth, Firestore, and deployment behavior are
+  unverified.
+- Supabase source credentials and the source database must remain available
+  until the import is complete and verified.
+- No commit, push, or deployment has been made for this cutover.
 
-## Validation Results
-- Validation blocked completely due to sandbox failure preventing terminal commands. Tests are written but require local manual execution.
+## Validation
 
-## Known Failures / Warnings
-- Terminal/run_command execution completely blocked due to sandbox attempting to mount C:\Dev\IgrisClean and throwing Access Denied.
-- Cannot run `npm test` or `npm run build` safely.
+- `npm run lint` passed.
+- `npm run typecheck` passed.
+- `npm test -- --runInBand` passed: 7 suites, 37 tests.
+- `npm run build` passed before the final lazy-loading adjustment; rerun after
+  the remaining changes.
+- Migration utility syntax check passed.
 
-## Exact Next Action
-- Stop without destructive cleanup. Developer must open `C:\Dev\daily-whatsapp-news` in a local shell, configure Jest properly in package.json, and run `npm test` and `npm run build`.
+## Next actions
 
-## Resume Instruction
-Resume the existing project at C:\Dev\daily-whatsapp-news.
-
-Read:
-- AGENTS.md
-- docs/PROJECT_STATE.md
-- docs/PROJECT_SPEC.md
-- docs/SECURITY_AND_SETUP.md
-
-Check git status.
-
-Continue from the exact unfinished action.
-
-Do not rescan C:\Dev.
-Do not access C:\Dev\IgrisClean.
-Do not repeat completed implementation.
-Do not commit, push or deploy.
+1. Add a newly generated Firebase Admin service-account JSON privately to
+   ignored `.env.local` and the deployment's Production secret settings.
+2. Run the migration preflight, inspect source counts, then run the import.
+3. Verify Firebase login, ownership-scoped data, Telegram, delivery jobs, and
+   production behavior before removing the temporary Supabase importer and
+   source credentials.

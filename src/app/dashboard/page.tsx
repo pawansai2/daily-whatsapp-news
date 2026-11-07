@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { AppNav } from "@/components/AppNav";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/firebase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +11,18 @@ type DashboardSettings = {
   delivery_time: string | null;
   timezone: string | null;
 };
+
+function isDashboardSettings(value: unknown): value is DashboardSettings {
+  if (!value || typeof value !== "object") return false;
+  const row = value as Record<string, unknown>;
+  return (
+    (typeof row.digest_enabled === "boolean" ||
+      row.digest_enabled === null) &&
+    (typeof row.delivery_time === "string" ||
+      row.delivery_time === null) &&
+    (typeof row.timezone === "string" || row.timezone === null)
+  );
+}
 
 function getCurrentMinutesInTimezone(
   timezone: string,
@@ -125,13 +137,13 @@ function getNextDeliveryLabel(
 }
 
 export default async function DashboardPage() {
-  const supabase =
+  const firebaseStore =
     await createClient();
 
   const {
     data: claimsData,
     error: claimsError,
-  } = await supabase.auth.getClaims();
+  } = await firebaseStore.auth.getClaims();
 
   const userId =
     claimsData?.claims?.sub;
@@ -150,7 +162,7 @@ export default async function DashboardPage() {
       error: telegramError,
     },
   ] = await Promise.all([
-    supabase
+    firebaseStore
       .from("personal_settings")
       .select(
         "digest_enabled, delivery_time, timezone",
@@ -158,7 +170,7 @@ export default async function DashboardPage() {
       .eq("owner_id", userId)
       .maybeSingle(),
 
-    supabase
+    firebaseStore
       .from("user_channels")
       .select(
         "username, verified_at, is_active",
@@ -177,8 +189,16 @@ export default async function DashboardPage() {
     );
   }
 
+  const dashboardSettings = isDashboardSettings(settings)
+    ? settings
+    : null;
+  const settingsShapeInvalid = Boolean(settings && !dashboardSettings);
+  if (settingsShapeInvalid) {
+    console.error("dashboard_settings_shape_invalid");
+  }
+
   const digestEnabled =
-    settings?.digest_enabled ?? false;
+    dashboardSettings?.digest_enabled ?? false;
 
   const telegramConnected =
     Boolean(
@@ -187,8 +207,8 @@ export default async function DashboardPage() {
     );
 
   const nextDelivery =
-    settings
-      ? getNextDeliveryLabel(settings)
+    dashboardSettings
+      ? getNextDeliveryLabel(dashboardSettings)
       : "Configure settings first";
 
   return (
@@ -259,15 +279,15 @@ export default async function DashboardPage() {
               {nextDelivery}
             </p>
 
-            {settings?.timezone ? (
+            {dashboardSettings?.timezone ? (
               <p className="mt-2 text-sm text-gray-500">
-                {settings.timezone}
+                {dashboardSettings.timezone}
               </p>
             ) : null}
           </section>
         </div>
 
-        {settingsError || telegramError ? (
+        {settingsError || telegramError || settingsShapeInvalid ? (
           <div
             role="alert"
             className="mt-6 rounded-md border border-red-200 bg-red-50 p-3 text-red-700"

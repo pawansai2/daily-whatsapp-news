@@ -1,26 +1,52 @@
+import {
+  getLanguageConfig,
+  normalizeLanguage,
+} from "@/lib/news/language";
+
 import type {
   NewsStory,
 } from "@/lib/news/provider";
+import type {
+  OpportunityDigestItem,
+} from "@/lib/opportunities/schema";
 
 type BuildDigestOptions = {
   stories: NewsStory[];
+  opportunities?: OpportunityDigestItem[];
   interests: string[];
   timezone: string;
+  language?: string | null;
+  localizationSucceeded?: boolean;
+  includeSummaries?: boolean;
+};
+
+export type BuiltTelegramDigest = {
+  message: string;
+  includedStoryIds: string[];
+  includedOpportunityIds: string[];
 };
 
 function truncate(
   value: string,
   maxLength: number,
 ): string {
+  const clean =
+    value
+      .replace(
+        /\s+/g,
+        " ",
+      )
+      .trim();
+
   if (
-    value.length <=
+    clean.length <=
     maxLength
   ) {
-    return value;
+    return clean;
   }
 
   return (
-    value
+    clean
       .slice(
         0,
         maxLength - 1,
@@ -30,17 +56,33 @@ function truncate(
   );
 }
 
-export function buildTelegramDigest({
+export function buildTelegramDigestDetailed({
   stories,
+  opportunities,
   interests,
   timezone,
-}: BuildDigestOptions): string {
+  language,
+  localizationSucceeded = true,
+  includeSummaries = false,
+}: BuildDigestOptions): BuiltTelegramDigest {
+  const normalizedLanguage =
+    normalizeLanguage(
+      language,
+    );
+
+  const copy =
+    getLanguageConfig(
+      normalizedLanguage,
+    );
+
   const date =
     new Intl.DateTimeFormat(
-      "en-IN",
+      copy.locale,
       {
-        timeZone: timezone,
-        dateStyle: "medium",
+        timeZone:
+          timezone,
+        dateStyle:
+          "medium",
       },
     ).format(
       new Date(),
@@ -51,13 +93,54 @@ export function buildTelegramDigest({
       ? interests.join(", ")
       : "General";
 
-  const sections: string[] = [
-    "📰 Daily Intelligence",
-    date,
-    "",
-    `Topics: ${topicLine}`,
-    "",
-  ];
+  const sections:
+    string[] = [
+      copy.digestTitle,
+      date,
+      "",
+      `${copy.topicsLabel}: ${topicLine}`,
+      "",
+    ];
+
+  if (
+    !localizationSucceeded &&
+    normalizedLanguage !== "en"
+  ) {
+    sections.push(
+      copy.fallbackNotice,
+      "",
+    );
+  }
+
+  const includedStoryIds:
+    string[] = [];
+  const includedOpportunityIds: string[] = [];
+
+  if (opportunities && opportunities.length > 0) {
+    sections.push("Opportunity matches with official-source evidence:");
+    for (const opportunity of opportunities) {
+      const deadline = opportunity.deadline
+        ? `Deadline: ${truncate(opportunity.deadline, 40)}`
+        : "Deadline: unknown";
+      const entry = [
+        `• ${truncate(opportunity.title, 140)} — ${opportunity.score}/100`,
+        `  Eligibility: ${opportunity.eligibilityStatus.replaceAll("_", " ")} · ${deadline}`,
+        `  Source: ${truncate(opportunity.sourceUrl, 500)}`,
+        "",
+      ].join("\n");
+      const projected = [
+        ...sections,
+        entry,
+        copy.footer,
+      ].join("\n");
+      if (projected.length > 3900) continue;
+      sections.push(entry);
+      includedOpportunityIds.push(opportunity.id);
+    }
+    if (includedOpportunityIds.length === 0) {
+      sections.pop();
+    }
+  }
 
   let storyNumber = 1;
 
@@ -65,22 +148,54 @@ export function buildTelegramDigest({
     const story
     of stories
   ) {
-    const entry = [
+    const entryLines = [
       `${storyNumber}. ${truncate(
         story.title,
         180,
       )}`,
-      `${story.source} • ${story.category}`,
+
+      `${copy.sourceLabel}: ${story.source} • ${truncate(
+        story.category,
+        80,
+      )}`,
+    ];
+
+    if (
+      includeSummaries &&
+      story.description.trim()
+    ) {
+      entryLines.push(
+        truncate(
+          story.description,
+          220,
+        ),
+      );
+    }
+
+    entryLines.push(
       story.originalUrl,
       "",
-    ].join("\n");
+    );
+
+    const entry =
+      entryLines.join(
+        "\n",
+      );
 
     const projected =
       [
         ...sections,
         entry,
-      ].join("\n");
+        copy.footer,
+      ].join(
+        "\n",
+      );
 
+    /*
+     * Telegram messages are limited to
+     * 4096 characters. Stay below that
+     * limit to leave safety margin.
+     */
     if (
       projected.length >
       3900
@@ -92,14 +207,36 @@ export function buildTelegramDigest({
       entry,
     );
 
+    includedStoryIds.push(
+      story.id,
+    );
+
     storyNumber += 1;
   }
 
   sections.push(
-    "Generated from trusted RSS sources.",
+    copy.footer,
   );
 
-  return sections
-    .join("\n")
-    .trim();
+  return {
+    message:
+      sections
+        .join("\n")
+        .trim(),
+
+    includedStoryIds,
+    includedOpportunityIds,
+  };
+}
+
+/*
+ * Backward-compatible wrapper used by
+ * the legacy daily-news route.
+ */
+export function buildTelegramDigest(
+  options: BuildDigestOptions,
+): string {
+  return buildTelegramDigestDetailed(
+    options,
+  ).message;
 }

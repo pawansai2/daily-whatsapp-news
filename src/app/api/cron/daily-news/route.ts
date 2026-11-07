@@ -2,9 +2,9 @@ import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 
 import {
-  getSupabaseAdmin,
-  hasSupabaseServerConfiguration,
-} from "@/lib/supabase/admin";
+  getFirebaseAdminClient,
+  hasFirebaseAdminConfiguration,
+} from "@/lib/firebase/store";
 
 import {
   createTitleHash,
@@ -271,14 +271,14 @@ export async function GET(
   }
 
   if (
-    !hasSupabaseServerConfiguration()
+    !hasFirebaseAdminConfiguration()
   ) {
     return NextResponse.json(
       {
         error:
-          "Supabase server configuration is missing",
+          "Firebase Admin configuration is missing",
         code:
-          "SUPABASE_NOT_CONFIGURED",
+          "FIREBASE_ADMIN_NOT_CONFIGURED",
       },
       {
         status: 503,
@@ -302,13 +302,13 @@ export async function GET(
     );
   }
 
-  const supabase =
-    getSupabaseAdmin();
+  const firebaseStore =
+    getFirebaseAdminClient();
 
   const {
     data: rawSettingsRows,
     error: settingsError,
-  } = await supabase
+  } = await firebaseStore
     .from(
       "personal_settings",
     )
@@ -459,7 +459,7 @@ export async function GET(
   const {
     data: occurrenceDelivery,
     error: occurrenceDeliveryError,
-  } = await supabase
+  } = await firebaseStore
     .from("deliveries")
     .select(
       "id, status, attempt_count, updated_at",
@@ -506,7 +506,7 @@ export async function GET(
     const {
       data: legacyDelivery,
       error: legacyDeliveryError,
-    } = await supabase
+    } = await firebaseStore
       .from("deliveries")
       .select(
         "id, status, attempt_count, updated_at",
@@ -588,7 +588,7 @@ export async function GET(
   const {
     data: interestRows,
     error: interestsError,
-  } = await supabase
+  } = await firebaseStore
     .from(
       "personal_interests",
     )
@@ -671,7 +671,7 @@ export async function GET(
   const {
     data: sentRows,
     error: sentError,
-  } = await supabase
+  } = await firebaseStore
     .from(
       "sent_article_hashes",
     )
@@ -813,7 +813,7 @@ export async function GET(
 
     const {
       error: lockError,
-    } = await supabase
+    } = await firebaseStore
       .from("deliveries")
       .update({
         status:
@@ -846,7 +846,7 @@ export async function GET(
     const {
       data: inserted,
       error: insertError,
-    } = await supabase
+    } = await firebaseStore
       .from("deliveries")
       .insert({
         owner_id:
@@ -891,6 +891,16 @@ export async function GET(
       );
     }
 
+    if (!inserted || typeof inserted.id !== "string") {
+      return NextResponse.json(
+        {
+          error: "Delivery record creation returned no document ID",
+          code: "DELIVERY_LOCK_FAILED",
+        },
+        { status: 500 },
+      );
+    }
+
     deliveryId =
       inserted.id;
   }
@@ -924,7 +934,7 @@ export async function GET(
     );
 
     if (deliveryId) {
-      await supabase
+      await firebaseStore
         .from(
           "deliveries",
         )
@@ -975,7 +985,7 @@ export async function GET(
 
   const {
     error: hashInsertError,
-  } = await supabase
+  } = await firebaseStore
     .from(
       "sent_article_hashes",
     )
@@ -997,7 +1007,7 @@ export async function GET(
     const {
       error:
         deliveryUpdateError,
-    } = await supabase
+    } = await firebaseStore
       .from(
         "deliveries",
       )

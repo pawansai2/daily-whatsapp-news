@@ -2,9 +2,9 @@ import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 
 import {
-  getSupabaseAdmin,
-  hasSupabaseServerConfiguration,
-} from "@/lib/supabase/admin";
+  getFirebaseAdminClient,
+  hasFirebaseAdminConfiguration,
+} from "@/lib/firebase/store";
 
 import {
   runNewsDeliveryForUser,
@@ -111,14 +111,14 @@ export async function GET(
   }
 
   if (
-    !hasSupabaseServerConfiguration()
+    !hasFirebaseAdminConfiguration()
   ) {
     return NextResponse.json(
       {
         error:
-          "Supabase server configuration is missing",
+          "Firebase Admin configuration is missing",
         code:
-          "SUPABASE_NOT_CONFIGURED",
+          "FIREBASE_ADMIN_NOT_CONFIGURED",
       },
       {
         status: 503,
@@ -147,8 +147,8 @@ export async function GET(
     );
   }
 
-  const supabase =
-    getSupabaseAdmin();
+  const firebaseStore =
+    getFirebaseAdminClient();
 
   const [
     {
@@ -160,7 +160,7 @@ export async function GET(
       error: channelsError,
     },
   ] = await Promise.all([
-    supabase
+    firebaseStore
       .from(
         "personal_settings",
       )
@@ -184,7 +184,7 @@ export async function GET(
         true,
       ),
 
-    supabase
+    firebaseStore
       .from(
         "user_channels",
       )

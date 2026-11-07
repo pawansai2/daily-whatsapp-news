@@ -1,6 +1,4 @@
-import { LoginSubmitButton } from "@/components/LoginSubmitButton";
-
-import { login } from "./actions";
+import { FirebaseLoginForm } from "@/components/FirebaseLoginForm";
 
 type LoginPageProps = {
   searchParams: Promise<{
@@ -32,54 +30,7 @@ export default async function LoginPage({
           Access is restricted to the configured owner account.
         </p>
 
-        {errorMessage ? (
-          <div
-            role="alert"
-            className="mt-5 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700"
-          >
-            {errorMessage}
-          </div>
-        ) : null}
-
-        <form action={login} className="mt-6 space-y-5">
-          <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Email
-            </label>
-
-            <input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900"
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Password
-            </label>
-
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900"
-            />
-          </div>
-
-          <LoginSubmitButton />
-        </form>
+        <FirebaseLoginForm initialError={errorMessage} />
       </section>
     </main>
   );

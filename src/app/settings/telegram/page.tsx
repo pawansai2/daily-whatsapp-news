@@ -2,20 +2,20 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { AppNav } from "@/components/AppNav";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/firebase/server";
 
 import TelegramLinkClient from "./TelegramLinkClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function TelegramSettingsPage() {
-  const supabase =
+  const firebaseStore =
     await createClient();
 
   const {
     data: claimsData,
     error: claimsError,
-  } = await supabase.auth.getClaims();
+  } = await firebaseStore.auth.getClaims();
 
   const userId =
     claimsData?.claims?.sub;
@@ -27,7 +27,7 @@ export default async function TelegramSettingsPage() {
   const {
     data: channel,
     error: channelError,
-  } = await supabase
+  } = await firebaseStore
     .from("user_channels")
     .select(
       "username, verified_at, is_active",

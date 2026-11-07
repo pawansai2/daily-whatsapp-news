@@ -1,30 +1,78 @@
-# Firebase integration foundation
+# Firebase application backend
 
-Firebase project `daily-whatsapp-news` is provisioned on the Spark plan. A web app named `daily-whatsapp-news-web` is registered, Email/Password Authentication is enabled, and the default Standard Firestore database was created in `asia-south1` (Mumbai) using production-mode rules. Google Analytics and Gemini were left disabled. The database is empty; no users or application data have been migrated.
+The application uses Firebase Authentication for email/password sign-in and
+Cloud Firestore for application data. Server-side reads and writes use the
+Firebase Admin SDK; Firestore client rules remain deny-all in
+[`firestore.rules`](./firestore.rules). The Admin SDK bypasses those rules, so
+authenticated server routes must verify the Firebase session cookie and scope
+user data to the verified Firebase UID.
 
-The existing app still authenticates with Supabase and reads its current data from Supabase. Firebase is not yet a drop-in replacement backend.
+## Required configuration
 
-## Configuration for another Firebase project
+Set these variables in an ignored local environment file and in the deployment
+secret manager:
 
-1. Create a Firebase project in the Firebase console and record its project ID.
-2. Register a Web app in that project. Copy the API key, auth domain, project ID, and app ID into the `NEXT_PUBLIC_FIREBASE_*` variables in the local environment or deployment secret/configuration manager.
-3. In Authentication, enable Email/Password only if that is the intended sign-in method. Do not change the active login page yet.
-4. Create the default Cloud Firestore database in a selected region. Region choice is difficult to change later; choose based on the app's users and hosting region.
-5. Keep Firestore locked down. The checked-in `firestore.rules` denies all client access until collection-specific rules and tests are added.
-6. For server-side Firebase Admin use, create a dedicated service account with the minimum required project permissions and store its JSON in `FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON` using a deployment secret manager or ignored local environment file. Do not commit the credential or paste it into chat.
-7. Keep the service account project ID equal to `NEXT_PUBLIC_FIREBASE_PROJECT_ID`. The server helper rejects a mismatch.
+- `NEXT_PUBLIC_FIREBASE_API_KEY`
+- `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
+- `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
+- `NEXT_PUBLIC_FIREBASE_APP_ID`
+- `FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON`
 
-## Available code
+The web configuration for the provisioned Firebase app is available as a
+fallback, but configuring the public variables explicitly is recommended.
+The Admin service-account JSON is private. Never commit it, print it, or paste
+it into chat. Its project ID must match `NEXT_PUBLIC_FIREBASE_PROJECT_ID`.
 
-- `src/lib/firebase/client.ts` initializes a named Firebase app and exports client Auth and Firestore accessors.
-- `src/lib/firebase/admin.ts` lazily initializes the Firebase Admin SDK and exports server Auth and Firestore accessors.
-- `src/lib/firebase/config.ts` contains the registered app's public web configuration, supports complete environment overrides, and parses Admin service account JSON without logging credential values. Firebase Web API keys are public identifiers; access control must come from Auth and restrictive Firestore rules, not secrecy of this key.
-- `firestore.rules` currently denies all client reads and writes.
+Email/Password Authentication must be enabled in Firebase Authentication.
+Server-side app requests require the Admin credential to verify session
+cookies; login will not complete if that credential is unavailable.
+Set `OPPORTUNITY_REVIEWER_EMAILS` to a comma-separated list of reviewer
+emails for the evidence-review page. `OPPORTUNITY_REVIEWER_IDS` may still be
+used when it contains current Firebase UIDs.
 
-The Admin SDK bypasses Firestore Security Rules. Before adding any Admin SDK operation, verify Firebase ID tokens or session cookies on the server, scope every query to the authenticated user, and test authorization boundaries. Never pass Admin SDK credentials to client code.
+## Data migration from Supabase
 
-## Cutover prerequisites
+The migration utility is a one-time source importer, not a production runtime
+dependency. It copies application collections, remaps `owner_id` and `user_id`
+references from Supabase UUIDs to Firebase UIDs by matching account email, and
+verifies imported documents and collection counts. It does not delete or alter
+the Supabase source.
 
-Supabase email/password hashes cannot simply be reused by Firebase Authentication. Before replacing login, choose a user transition (approved account import/reset or a temporary staged login), decide how Firebase UIDs map to existing Supabase UUID rows, and decide how to preserve or intentionally leave behind settings and delivery history. No such decision or data movement is part of this foundation.
+Firebase Auth passwords are not copied. Every Supabase account must already
+exist in Firebase Authentication with the same email address before importing.
+Existing Firebase accounts keep their existing credentials.
 
-Before moving an existing collection from Supabase to Firestore, define document IDs, ownership rules, indexes, retention/rollback, and export/import validation. Use the Firebase Emulator Suite and staging project before any production writes. This repository does not yet include emulator tests, Firestore data repositories, or a migration script.
+1. Keep the Supabase project and source data available during migration.
+2. Set `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SECRET_KEY` locally, along with
+   the Firebase variables above. Do not put these secrets in chat or source
+   control.
+3. Ensure Firestore is empty, or contains only documents that exactly match
+   the source. The importer refuses to overwrite different data or delete
+   extra documents.
+4. Run `npm run migrate:firebase` for a read-only preflight. It reports counts
+   without writing.
+5. After reviewing the counts, run
+   `npm run migrate:firebase -- --apply`. The import is additive and can be
+   rerun safely when the existing documents match the source.
+6. Confirm post-import collection counts and test sign-in, user settings,
+   Telegram linking, delivery history, and scheduled jobs in staging.
+7. After production verification, remove the Supabase source credentials and
+   migration-only dependency/tooling in a separate cleanup.
+
+The migration stops before writing if a source collection cannot be read, an
+account has no matching Firebase user, or the target contains conflicting
+documents. No production migration should be claimed complete until the
+preflight, import, and post-import verification succeed.
+
+## Authentication and ownership
+
+The login form signs in with the Firebase Web SDK and exchanges the ID token
+for an HTTP-only, secure-in-production session cookie. Server components,
+actions, and API routes verify that cookie with Firebase Admin. Firestore
+collections retain the existing table names and row fields; user-owned rows
+must use the verified Firebase UID in their ownership fields.
+
+`src/lib/firebase/client.ts` initializes the Web SDK.
+`src/lib/firebase/admin.ts` initializes the Admin SDK.
+`src/lib/firebase/server.ts` verifies server sessions and exposes the
+server-only Firestore data client.

@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/firebase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const supabase =
+  const firebaseStore =
     await createClient();
 
   const {
     data: claimsData,
     error: claimsError,
-  } = await supabase.auth.getClaims();
+  } = await firebaseStore.auth.getClaims();
 
   const userId =
     claimsData?.claims?.sub;
@@ -34,7 +34,7 @@ export async function GET() {
   const {
     data: channel,
     error: channelError,
-  } = await supabase
+  } = await firebaseStore
     .from("user_channels")
     .select(
       "username, verified_at, is_active",

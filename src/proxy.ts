@@ -1,9 +1,34 @@
-import type { NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
-import { updateSession } from "@/lib/supabase/proxy";
+import { FIREBASE_SESSION_COOKIE } from "@/lib/firebase/session";
 
-export async function proxy(request: NextRequest) {
-  return updateSession(request);
+const protectedPaths = [
+  "/dashboard",
+  "/settings",
+  "/history",
+  "/news-preview",
+  "/opportunities",
+  "/admin",
+];
+
+function isProtectedPath(pathname: string): boolean {
+  return protectedPaths.some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`),
+  );
+}
+
+export function proxy(request: NextRequest) {
+  if (
+    isProtectedPath(request.nextUrl.pathname) &&
+    !request.cookies.has(FIREBASE_SESSION_COOKIE)
+  ) {
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = "/login";
+    loginUrl.search = "";
+    return NextResponse.redirect(loginUrl);
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/firebase/server";
 import {
   hasTelegramConfiguration,
   sendTelegramMessage,
@@ -41,13 +41,13 @@ function safeEqual(
  * settings screen.
  */
 export async function POST() {
-  const supabase =
+  const firebaseStore =
     await createClient();
 
   const {
     data: claimsData,
     error: claimsError,
-  } = await supabase.auth.getClaims();
+  } = await firebaseStore.auth.getClaims();
 
   const userId =
     claimsData?.claims?.sub;
@@ -66,7 +66,7 @@ export async function POST() {
   const {
     data: channel,
     error: channelError,
-  } = await supabase
+  } = await firebaseStore
     .from("user_channels")
     .select(
       "external_chat_id, verified_at, is_active",

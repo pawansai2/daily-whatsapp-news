@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/firebase/server";
 import { decryptPhone } from "@/lib/utils/crypto";
 
 import { AppNav } from "@/components/AppNav";
@@ -30,12 +30,12 @@ export default async function SettingsPage({
   searchParams,
 }: SettingsPageProps) {
   const params = await searchParams;
-  const supabase = await createClient();
+  const firebaseStore = await createClient();
 
   const {
     data: claimsData,
     error: claimsError,
-  } = await supabase.auth.getClaims();
+  } = await firebaseStore.auth.getClaims();
 
   const userId =
     claimsData?.claims?.sub;
@@ -48,7 +48,7 @@ export default async function SettingsPage({
     { data: settings, error: settingsError },
     { data: interests, error: interestsError },
   ] = await Promise.all([
-    supabase
+    firebaseStore
       .from("personal_settings")
       .select(
         "encrypted_phone, language, custom_keywords, timezone, delivery_time, story_limit, digest_enabled",
@@ -56,7 +56,7 @@ export default async function SettingsPage({
       .eq("owner_id", userId)
       .maybeSingle(),
 
-    supabase
+    firebaseStore
       .from("personal_interests")
       .select("display_name")
       .eq("owner_id", userId)
@@ -113,6 +113,12 @@ export default async function SettingsPage({
         className="mt-4 inline-block rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50"
       >
         Manage Telegram connection
+      </a>
+      <a
+        href="/settings/opportunities"
+        className="ml-3 mt-4 inline-block rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50"
+      >
+        Edit eligibility profile
       </a>
 
       {params.saved === "all" ? (

@@ -6,9 +6,6 @@ import {
   initializeApp,
 } from "firebase-admin/app";
 import {
-  getAuth,
-} from "firebase-admin/auth";
-import {
   getFirestore,
 } from "firebase-admin/firestore";
 
@@ -45,7 +42,8 @@ export function getFirebaseAdminApp() {
   );
 }
 
-export function getFirebaseAdminAuth() {
+export async function getFirebaseAdminAuth() {
+  const { getAuth } = await import("firebase-admin/auth");
   return getAuth(getFirebaseAdminApp());
 }
 

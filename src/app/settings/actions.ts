@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { parsePhoneNumberWithError } from "libphonenumber-js";
 
 import { SettingsUpdateSchema } from "@/lib/schema/settings";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/firebase/server";
 import { encryptPhone, hashPhone } from "@/lib/utils/crypto";
 
 function redirectToSettings(parameter: string): never {
@@ -55,12 +55,12 @@ function createSlug(value: string): string {
 export async function saveSettings(
   formData: FormData,
 ) {
-  const supabase = await createClient();
+  const firebaseStore = await createClient();
 
   const {
     data: claimsData,
     error: claimsError,
-  } = await supabase.auth.getClaims();
+  } = await firebaseStore.auth.getClaims();
 
   const userId =
     claimsData?.claims?.sub;
@@ -137,7 +137,7 @@ export async function saveSettings(
       encryptPhone(normalizedPhone);
   }
 
-  const { error: settingsError } = await supabase
+  const { error: settingsError } = await firebaseStore
     .from("personal_settings")
     .upsert(
       {
@@ -173,7 +173,7 @@ export async function saveSettings(
   }
 
   const { error: deleteInterestsError } =
-    await supabase
+    await firebaseStore
       .from("personal_interests")
       .delete()
       .eq("owner_id", userId);
@@ -197,7 +197,7 @@ export async function saveSettings(
 
   if (interestRows.length > 0) {
     const { error: insertInterestsError } =
-      await supabase
+      await firebaseStore
         .from("personal_interests")
         .insert(interestRows);
 

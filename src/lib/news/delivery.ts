@@ -1,6 +1,6 @@
 import {
-  getSupabaseAdmin,
-} from "@/lib/supabase/admin";
+  getFirebaseAdminClient,
+} from "@/lib/firebase/store";
 
 import {
   createTitleHash,
@@ -9,8 +9,18 @@ import {
 } from "@/lib/news/provider";
 
 import {
-  buildTelegramDigest,
+  buildTelegramDigestDetailed,
 } from "@/lib/news/digest";
+
+import {
+  localizeStories,
+} from "@/lib/news/localization";
+import {
+  getOpportunityDigestItems,
+} from "@/lib/opportunities/notifications";
+import type {
+  OpportunityDigestItem,
+} from "@/lib/opportunities/schema";
 
 import {
   buildNewsOccurrenceKey,
@@ -107,15 +117,15 @@ async function updateDeliveryStatus(
   failureCode:
     string | null,
 ) {
-  const supabase =
-    getSupabaseAdmin();
+  const firebaseStore =
+    getFirebaseAdminClient();
 
   const now =
     new Date().toISOString();
 
   const {
     error,
-  } = await supabase
+  } = await firebaseStore
     .from("deliveries")
     .update({
       status,
@@ -147,8 +157,8 @@ export async function runNewsDeliveryForUser(
   chatId: string,
   now: Date = new Date(),
 ): Promise<NewsDeliveryResult> {
-  const supabase =
-    getSupabaseAdmin();
+  const firebaseStore =
+    getFirebaseAdminClient();
 
   const timezone =
     settings.timezone ||
@@ -213,7 +223,7 @@ export async function runNewsDeliveryForUser(
   const {
     data: occurrenceDelivery,
     error: occurrenceError,
-  } = await supabase
+  } = await firebaseStore
     .from("deliveries")
     .select(
       "id,status,attempt_count,updated_at",
@@ -255,7 +265,7 @@ export async function runNewsDeliveryForUser(
     const {
       data: legacyDelivery,
       error: legacyError,
-    } = await supabase
+    } = await firebaseStore
       .from("deliveries")
       .select(
         "id,status,attempt_count,updated_at",
@@ -387,7 +397,7 @@ export async function runNewsDeliveryForUser(
     const {
       data: locked,
       error: lockError,
-    } = await supabase
+    } = await firebaseStore
       .from("deliveries")
       .update({
         status:
@@ -436,7 +446,7 @@ export async function runNewsDeliveryForUser(
     const {
       data: inserted,
       error: insertError,
-    } = await supabase
+    } = await firebaseStore
       .from("deliveries")
       .insert({
         owner_id:
@@ -481,6 +491,14 @@ export async function runNewsDeliveryForUser(
       };
     }
 
+    if (!inserted || typeof inserted.id !== "string") {
+      return {
+        ownerId: settings.owner_id,
+        status: "failed",
+        reason: "delivery_create_returned_no_id",
+      };
+    }
+
     deliveryId =
       inserted.id;
   }
@@ -505,7 +523,7 @@ export async function runNewsDeliveryForUser(
       error: sentError,
     },
   ] = await Promise.all([
-    supabase
+    firebaseStore
       .from(
         "personal_interests",
       )
@@ -523,7 +541,7 @@ export async function runNewsDeliveryForUser(
         },
       ),
 
-    supabase
+    firebaseStore
       .from(
         "sent_article_hashes",
       )
@@ -604,7 +622,8 @@ export async function runNewsDeliveryForUser(
           "Science",
         ];
 
-  let stories;
+  let stories: Awaited<ReturnType<typeof fetchNews>> = [];
+  let newsFetchFailed = false;
 
   try {
     stories =
@@ -628,6 +647,7 @@ export async function runNewsDeliveryForUser(
         },
       );
   } catch (error) {
+    newsFetchFailed = true;
     console.error(
       "dispatcher_news_fetch_failed",
       {
@@ -640,21 +660,6 @@ export async function runNewsDeliveryForUser(
       },
     );
 
-    if (deliveryId) {
-      await updateDeliveryStatus(
-        deliveryId,
-        "failed",
-        "NEWS_FETCH_FAILED",
-      );
-    }
-
-    return {
-      ownerId:
-        settings.owner_id,
-      status: "failed",
-      reason:
-        "news_fetch_failed",
-    };
   }
 
   const sentHashes =
@@ -695,16 +700,53 @@ export async function runNewsDeliveryForUser(
       storyLimit,
     );
 
+  let opportunityItems: OpportunityDigestItem[];
+  try {
+    opportunityItems = await getOpportunityDigestItems(
+      firebaseStore,
+      settings.owner_id,
+      now,
+      timezone,
+    );
+  } catch (error) {
+    console.error("dispatcher_opportunity_digest_query_failed", {
+      ownerId: settings.owner_id,
+      message: error instanceof Error ? error.message : "unknown",
+    });
+    if (deliveryId) {
+      await updateDeliveryStatus(
+        deliveryId,
+        "failed",
+        "OPPORTUNITY_DIGEST_QUERY_FAILED",
+      );
+    }
+    return {
+      ownerId: settings.owner_id,
+      status: "failed",
+      reason: "opportunity_digest_query_failed",
+    };
+  }
+
   if (
-    selectedStories.length ===
-      0
+    selectedStories.length === 0 &&
+    opportunityItems.length === 0
   ) {
     if (deliveryId) {
       await updateDeliveryStatus(
         deliveryId,
-        "skipped",
-        "NO_FRESH_STORIES",
+        newsFetchFailed ? "failed" : "skipped",
+        newsFetchFailed ? "NEWS_FETCH_FAILED" : "NO_FRESH_STORIES",
       );
+    }
+
+    if (newsFetchFailed) {
+      return {
+        ownerId: settings.owner_id,
+        status: "failed",
+        reason: "news_fetch_failed",
+        localDate: localClock.localDate,
+        deliveryTime: settings.delivery_time,
+      };
     }
 
     return {
@@ -724,14 +766,72 @@ export async function runNewsDeliveryForUser(
     };
   }
 
-  const message =
-    buildTelegramDigest({
+  /*
+   * Localization happens only after
+   * ranking/selection so we do not spend
+   * AI tokens on stories that will never
+   * be delivered.
+   */
+  const localization =
+    await localizeStories(
+      selectedStories,
+      settings.language,
+    );
+
+  const digest =
+    buildTelegramDigestDetailed({
       stories:
-        selectedStories,
+        localization.stories,
+      opportunities: opportunityItems,
       interests:
         effectiveInterests,
       timezone,
+      language:
+        localization.language,
+      localizationSucceeded:
+        localization.localized,
+      includeSummaries:
+        true,
     });
+
+  const includedStoryIds =
+    new Set(
+      digest.includedStoryIds,
+    );
+
+  const deliveredStories =
+    selectedStories.filter(
+      (story) =>
+        includedStoryIds.has(
+          story.id,
+        ),
+    );
+  const deliveredOpportunityCount =
+    digest.includedOpportunityIds.length;
+
+  if (
+    deliveredStories.length === 0 &&
+    deliveredOpportunityCount === 0
+  ) {
+    if (deliveryId) {
+      await updateDeliveryStatus(
+        deliveryId,
+        "failed",
+        "DIGEST_EMPTY",
+      );
+    }
+
+    return {
+      ownerId:
+        settings.owner_id,
+      status: "failed",
+      reason:
+        "digest_empty",
+    };
+  }
+
+  const message =
+    digest.message;
 
   let messageId:
     number;
@@ -776,7 +876,7 @@ export async function runNewsDeliveryForUser(
     new Date().toISOString();
 
   const hashRows =
-    selectedStories.map(
+    deliveredStories.map(
       (story) => ({
         owner_id:
           settings.owner_id,
@@ -791,24 +891,26 @@ export async function runNewsDeliveryForUser(
       }),
     );
 
-  const {
-    error: hashError,
-  } = await supabase
-    .from(
-      "sent_article_hashes",
-    )
-    .insert(hashRows);
+  if (hashRows.length > 0) {
+    const {
+      error: hashError,
+    } = await firebaseStore
+      .from(
+        "sent_article_hashes",
+      )
+      .insert(hashRows);
 
-  if (hashError) {
-    console.error(
-      "dispatcher_sent_hash_insert_failed",
-      {
-        ownerId:
-          settings.owner_id,
-        code:
-          hashError.code,
-      },
-    );
+    if (hashError) {
+      console.error(
+        "dispatcher_sent_hash_insert_failed",
+        {
+          ownerId:
+            settings.owner_id,
+          code:
+            hashError.code,
+        },
+      );
+    }
   }
 
   if (deliveryId) {
@@ -822,7 +924,7 @@ export async function runNewsDeliveryForUser(
     ) {
       const {
         error: updateError,
-      } = await supabase
+      } = await firebaseStore
         .from("deliveries")
         .update({
           status: "sent",
@@ -892,7 +994,7 @@ export async function runNewsDeliveryForUser(
     eligible:
       rankedStories.length,
     sent:
-      selectedStories.length,
+      deliveredStories.length,
     messageId,
   };
 }

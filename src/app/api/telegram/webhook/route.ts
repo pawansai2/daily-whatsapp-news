@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { NextResponse } from "next/server";
 
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { claimTelegramLink } from "@/lib/firebase/telegram";
 import { sendTelegramMessageToChat } from "@/lib/telegram/client";
 
 export const runtime = "nodejs";
@@ -24,11 +24,6 @@ type TelegramMessage = {
 type TelegramUpdate = {
   update_id?: number;
   message?: TelegramMessage;
-};
-
-type TelegramLinkResult = {
-  link_status: string;
-  linked_user_id: string | null;
 };
 
 function safeEqual(
@@ -180,29 +175,19 @@ export async function POST(
     });
   }
 
-  const admin =
-    getSupabaseAdmin();
-
-  const {
-    data,
-    error,
-  } = await admin.rpc(
-    "claim_telegram_link",
-    {
-      p_token_hash:
-        hashLinkCode(code),
-      p_chat_id: chatId,
-      p_username:
-        message.from?.username ??
-        null,
-    },
-  );
-
-  if (error) {
+  let linkStatus: string;
+  try {
+    linkStatus = await claimTelegramLink(
+      hashLinkCode(code),
+      chatId,
+      message.from?.username ?? null,
+    );
+  } catch (error) {
     console.error(
       "telegram_link_claim_failed",
       {
-        code: error.code,
+        message:
+          error instanceof Error ? error.message : "unknown",
       },
     );
 
@@ -216,14 +201,7 @@ export async function POST(
     });
   }
 
-  const results =
-    (data ?? []) as unknown as
-      TelegramLinkResult[];
-
-  const result =
-    results[0];
-
-  switch (result?.link_status) {
+  switch (linkStatus) {
     case "linked":
       await reply(
         chatId,

@@ -6,14 +6,13 @@
         "dev": "next dev",
         "build": "next build",
         "start": "next start",
+        "migrate:firebase": "node --env-file=.env.local scripts/migrate-supabase-to-firestore.mjs",
         "lint": "eslint .",
         "typecheck": "tsc --noEmit",
         "test": "jest",
         "validate": "npm run lint && npm run typecheck && npm run test && npm run build"
     },
     "dependencies": {
-        "@supabase/ssr": "^0.12.4",
-        "@supabase/supabase-js": "latest",
         "fast-xml-parser": "latest",
         "firebase": "^13.2.0",
         "firebase-admin": "^14.5.0",
@@ -36,7 +35,7 @@
         "eslint-config-next": "latest",
         "jest": "latest",
         "postcss": "latest",
-        "supabase": "^2.111.0",
+        "@supabase/supabase-js": "latest",
         "tailwindcss": "latest",
         "typescript": "latest"
     }
