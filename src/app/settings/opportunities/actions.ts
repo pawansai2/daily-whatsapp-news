@@ -15,6 +15,12 @@ function nullableNumber(value: string): number | null {
   return value === "" ? null : Number(value);
 }
 
+function nullableBoolean(value: string): boolean | null {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return null;
+}
+
 function parseList(value: string): string[] {
   const unique = new Map<string, string>();
   for (const item of value.split(",")) {
@@ -51,14 +57,32 @@ export async function saveOpportunityProfile(formData: FormData) {
     ),
     countryOfEligibility:
       readString(formData, "countryOfEligibility") || null,
+    currentStatus: readString(formData, "currentStatus") || null,
     availableTeamSize: nullableNumber(
       readString(formData, "availableTeamSize"),
     ),
     individualTeamPreference:
       readString(formData, "individualTeamPreference") || null,
     skills: parseList(readString(formData, "skills")),
+    skillProficiency: readString(formData, "skillProficiency") || null,
+    projects: readString(formData, "projects") || null,
+    experience: readString(formData, "experience") || null,
+    certifications: readString(formData, "certifications") || null,
     preferredDomains: parseList(
       readString(formData, "preferredDomains"),
+    ),
+    preferredFormats: (["online", "offline", "hybrid"] as const).filter(
+      (format) => formData.get(`format_${format}`) === "on",
+    ),
+    preferredLocations: parseList(
+      readString(formData, "preferredLocations"),
+    ),
+    travelAvailable: nullableBoolean(readString(formData, "travelAvailable")),
+    internshipEligible: nullableBoolean(
+      readString(formData, "internshipEligible"),
+    ),
+    employmentEligible: nullableBoolean(
+      readString(formData, "employmentEligible"),
     ),
     budgetLimitAmount: nullableNumber(
       readString(formData, "budgetLimitAmount"),
@@ -92,11 +116,21 @@ export async function saveOpportunityProfile(formData: FormData) {
         branch_or_discipline: profile.branchOrDiscipline,
         graduation_year: profile.graduationYear,
         eligibility_country: profile.countryOfEligibility,
+        current_status: profile.currentStatus,
         available_team_size: profile.availableTeamSize,
         individual_team_preference:
           profile.individualTeamPreference,
         technical_skills: profile.skills,
+        skill_proficiency: profile.skillProficiency,
+        projects: profile.projects,
+        experience: profile.experience,
+        certifications: profile.certifications,
         preferred_domains: profile.preferredDomains,
+        preferred_formats: profile.preferredFormats,
+        preferred_locations: profile.preferredLocations,
+        travel_available: profile.travelAvailable,
+        internship_eligible: profile.internshipEligible,
+        employment_eligible: profile.employmentEligible,
         budget_limit_amount: profile.budgetLimitAmount,
         budget_limit_currency: profile.budgetLimitCurrency,
         opportunity_digest_enabled: profile.digestEnabled,

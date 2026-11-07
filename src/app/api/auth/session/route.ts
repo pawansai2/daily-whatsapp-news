@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { isOwnerClaims } from "@/lib/auth/authorization";
 import { getFirebaseAdminAuth } from "@/lib/firebase/admin";
 import { FIREBASE_SESSION_COOKIE } from "@/lib/firebase/server";
 
@@ -37,7 +38,15 @@ export async function POST(request: Request) {
 
   try {
     const auth = await getFirebaseAdminAuth();
-    await auth.verifyIdToken(body.idToken, true);
+    const claims = await auth.verifyIdToken(body.idToken, true);
+
+    if (!isOwnerClaims(claims)) {
+      return NextResponse.json(
+        { error: "This account is not authorized for this deployment." },
+        { status: 403 },
+      );
+    }
+
     const sessionCookie = await auth.createSessionCookie(body.idToken, {
       expiresIn: SESSION_DURATION_MS,
     });

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { isReviewerClaims } from "@/lib/auth/authorization";
 import {
   OPPORTUNITY_VERIFIED_FIELDS,
 } from "@/lib/opportunities/schema";
@@ -16,15 +17,6 @@ import { getFirebaseAdminClient } from "@/lib/firebase/store";
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function reviewerIds(): Set<string> {
-  return new Set(
-    (process.env.OPPORTUNITY_REVIEWER_IDS ?? "")
-      .split(",")
-      .map((value) => value.trim().toLowerCase())
-      .filter(Boolean),
-  );
-}
-
 function value(formData: FormData, name: string): string {
   const item = formData.get(name);
   return typeof item === "string" ? item.trim() : "";
@@ -32,6 +24,86 @@ function value(formData: FormData, name: string): string {
 
 function backToQueue(result: string): never {
   redirect(`/admin/opportunities?${result}`);
+}
+
+const LIFECYCLE_DECISIONS = [
+  "active",
+  "closing_soon",
+  "expired",
+  "postponed",
+  "cancelled",
+] as const;
+
+export async function updateOpportunityLifecycle(formData: FormData) {
+  const authClient = await createClient();
+  const { data: claimsData, error: claimsError } =
+    await authClient.auth.getClaims();
+  const reviewerId = claimsData?.claims?.sub;
+  if (
+    claimsError ||
+    typeof reviewerId !== "string" ||
+    !isReviewerClaims(claimsData?.claims ?? null)
+  ) {
+    redirect("/login");
+  }
+
+  const opportunityId = value(formData, "opportunityId");
+  const lifecycle = value(formData, "lifecycle");
+  const reason = value(formData, "reason").slice(0, 500);
+  if (!uuid.test(opportunityId)) backToQueue("error=invalid_opportunity");
+  if (
+    !LIFECYCLE_DECISIONS.includes(
+      lifecycle as typeof LIFECYCLE_DECISIONS[number],
+    ) ||
+    !reason
+  ) {
+    backToQueue("error=invalid_decision");
+  }
+
+  const admin = getFirebaseAdminClient();
+  const { data: opportunity, error: lookupError } = await admin
+    .from("opportunities")
+    .select("id,lifecycle_status")
+    .eq("id", opportunityId)
+    .maybeSingle();
+  if (lookupError || !opportunity) backToQueue("error=review_failed");
+
+  const now = new Date().toISOString();
+  const { error: historyError } = await admin
+    .from("opportunity_changes")
+    .insert({
+      opportunity_id: opportunityId,
+      field_name: "lifecycle_status",
+      previous_value: opportunity.lifecycle_status ?? null,
+      new_value: lifecycle,
+      change_reason: `Manual lifecycle decision: ${reason}`,
+      reviewer_id: reviewerId,
+      changed_at: now,
+    });
+  if (historyError) {
+    console.error("opportunity_lifecycle_history_failed", {
+      code: historyError.code,
+    });
+    backToQueue("error=review_failed");
+  }
+
+  const { error: updateError } = await admin
+    .from("opportunities")
+    .update({
+      lifecycle_status: lifecycle,
+      updated_at: now,
+    })
+    .eq("id", opportunityId);
+  if (updateError) {
+    console.error("opportunity_lifecycle_update_failed", {
+      code: updateError.code,
+    });
+    backToQueue("error=review_failed");
+  }
+
+  revalidatePath("/opportunities");
+  revalidatePath("/admin/opportunities");
+  backToQueue("saved=1");
 }
 
 export async function reviewOpportunityEvidence(formData: FormData) {
@@ -42,8 +114,8 @@ export async function reviewOpportunityEvidence(formData: FormData) {
 
   if (
     claimsError ||
-    !reviewerId ||
-    !reviewerIds().has(reviewerId.toLowerCase())
+    typeof reviewerId !== "string" ||
+    !isReviewerClaims(claimsData?.claims ?? null)
   ) {
     redirect("/login");
   }

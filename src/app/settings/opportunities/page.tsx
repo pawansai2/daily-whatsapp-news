@@ -35,7 +35,7 @@ export default async function OpportunityProfilePage({
   const { data: profile, error } = await firebaseStore
     .from("opportunity_profiles")
     .select(
-      "education_level, degree, branch_or_discipline, graduation_year, eligibility_country, available_team_size, individual_team_preference, technical_skills, preferred_domains, budget_limit_amount, budget_limit_currency, opportunity_digest_enabled, opportunity_digest_minimum_score",
+      "education_level, degree, branch_or_discipline, graduation_year, eligibility_country, current_status, available_team_size, individual_team_preference, technical_skills, skill_proficiency, projects, experience, certifications, preferred_domains, preferred_formats, preferred_locations, travel_available, internship_eligible, employment_eligible, budget_limit_amount, budget_limit_currency, opportunity_digest_enabled, opportunity_digest_minimum_score",
     )
     .eq("user_id", userId)
     .maybeSingle();
@@ -128,6 +128,16 @@ export default async function OpportunityProfilePage({
               />
             </label>
             <label className="text-sm font-medium text-gray-700">
+              Current status
+              <input
+                name="currentStatus"
+                maxLength={100}
+                placeholder="Student, graduate, professional"
+                defaultValue={profile?.current_status ?? ""}
+                className="mt-1 w-full rounded-md border px-3 py-2"
+              />
+            </label>
+            <label className="text-sm font-medium text-gray-700">
               Available team size
               <input
                 name="availableTeamSize"
@@ -185,6 +195,131 @@ export default async function OpportunityProfilePage({
               className="mt-1 w-full rounded-md border px-3 py-2"
             />
           </label>
+
+          <label className="block text-sm font-medium text-gray-700">
+            Skill proficiency notes
+            <textarea
+              name="skillProficiency"
+              rows={2}
+              maxLength={2000}
+              defaultValue={profile?.skill_proficiency ?? ""}
+              className="mt-1 w-full rounded-md border px-3 py-2"
+              placeholder="Python: advanced; CAD: intermediate"
+            />
+          </label>
+
+          <label className="block text-sm font-medium text-gray-700">
+            Projects
+            <textarea
+              name="projects"
+              rows={3}
+              maxLength={5000}
+              defaultValue={profile?.projects ?? ""}
+              className="mt-1 w-full rounded-md border px-3 py-2"
+            />
+          </label>
+
+          <label className="block text-sm font-medium text-gray-700">
+            Experience
+            <textarea
+              name="experience"
+              rows={3}
+              maxLength={5000}
+              defaultValue={profile?.experience ?? ""}
+              className="mt-1 w-full rounded-md border px-3 py-2"
+            />
+          </label>
+
+          <label className="block text-sm font-medium text-gray-700">
+            Certifications
+            <textarea
+              name="certifications"
+              rows={2}
+              maxLength={3000}
+              defaultValue={profile?.certifications ?? ""}
+              className="mt-1 w-full rounded-md border px-3 py-2"
+            />
+          </label>
+
+          <fieldset className="rounded-md border border-gray-200 p-4">
+            <legend className="px-1 text-sm font-medium text-gray-700">
+              Preferred formats
+            </legend>
+            <div className="mt-2 flex flex-wrap gap-4 text-sm text-gray-700">
+              {(["online", "offline", "hybrid"] as const).map((format) => (
+                <label key={format} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    name={`format_${format}`}
+                    defaultChecked={Array.isArray(profile?.preferred_formats) &&
+                      profile.preferred_formats.includes(format)}
+                  />
+                  {format[0].toUpperCase() + format.slice(1)}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <label className="block text-sm font-medium text-gray-700">
+            Preferred locations
+            <input
+              name="preferredLocations"
+              defaultValue={stringList(profile?.preferred_locations)}
+              placeholder="India, Bengaluru, remote"
+              className="mt-1 w-full rounded-md border px-3 py-2"
+            />
+          </label>
+
+          <div className="grid gap-5 sm:grid-cols-3">
+            <label className="text-sm font-medium text-gray-700">
+              Travel available
+              <select
+                name="travelAvailable"
+                defaultValue={profile?.travel_available === true
+                  ? "true"
+                  : profile?.travel_available === false
+                    ? "false"
+                    : ""}
+                className="mt-1 w-full rounded-md border px-3 py-2"
+              >
+                <option value="">Unknown</option>
+                <option value="true">Yes</option>
+                <option value="false">No</option>
+              </select>
+            </label>
+            <label className="text-sm font-medium text-gray-700">
+              Internship eligible
+              <select
+                name="internshipEligible"
+                defaultValue={profile?.internship_eligible === true
+                  ? "true"
+                  : profile?.internship_eligible === false
+                    ? "false"
+                    : ""}
+                className="mt-1 w-full rounded-md border px-3 py-2"
+              >
+                <option value="">Unknown</option>
+                <option value="true">Yes</option>
+                <option value="false">No</option>
+              </select>
+            </label>
+            <label className="text-sm font-medium text-gray-700">
+              Employment eligible
+              <select
+                name="employmentEligible"
+                defaultValue={profile?.employment_eligible === true
+                  ? "true"
+                  : profile?.employment_eligible === false
+                    ? "false"
+                    : ""}
+                className="mt-1 w-full rounded-md border px-3 py-2"
+              >
+                <option value="">Unknown</option>
+                <option value="true">Yes</option>
+                <option value="false">No</option>
+              </select>
+            </label>
+          </div>
 
           <label className="block text-sm font-medium text-gray-700">
             Maximum entry budget

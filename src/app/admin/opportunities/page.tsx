@@ -1,14 +1,24 @@
 import { redirect } from "next/navigation";
 
+import { isReviewerClaims } from "@/lib/auth/authorization";
 import { getFirebaseAdminClient } from "@/lib/firebase/store";
 import { createClient } from "@/lib/firebase/server";
 import { VERIFIABLE_FIELDS } from "@/lib/opportunities/verification";
 
-import { reviewOpportunityEvidence } from "./actions";
+import {
+  reviewOpportunityEvidence,
+  updateOpportunityLifecycle,
+} from "./actions";
 
 type AdminPageProps = {
   searchParams: Promise<{ error?: string; saved?: string }>;
 };
+
+function formatTimestamp(value: unknown): string {
+  if (typeof value !== "string" || !value.trim()) return "Unknown";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Unknown" : date.toISOString();
+}
 
 const errorText: Record<string, string> = {
   invalid_opportunity: "Select a valid opportunity.",
@@ -26,29 +36,9 @@ export default async function OpportunityReviewPage({
   const authClient = await createClient();
   const { data: claimsData, error: claimsError } =
     await authClient.auth.getClaims();
-  const userId = claimsData?.claims?.sub;
-  const reviewerIds = new Set(
-    (process.env.OPPORTUNITY_REVIEWER_IDS ?? "")
-      .split(",")
-      .map((item) => item.trim().toLowerCase())
-      .filter(Boolean),
-  );
-  const reviewerEmails = new Set(
-    (process.env.OPPORTUNITY_REVIEWER_EMAILS ?? "")
-      .split(",")
-      .map((item) => item.trim().toLowerCase())
-      .filter(Boolean),
-  );
-  const email =
-    typeof claimsData?.claims?.email === "string"
-      ? claimsData.claims.email.toLowerCase()
-      : "";
-
   if (
     claimsError ||
-    !userId ||
-    (!reviewerIds.has(userId.toLowerCase()) &&
-      (!email || !reviewerEmails.has(email)))
+    !isReviewerClaims(claimsData?.claims ?? null)
   ) {
     redirect("/dashboard");
   }
@@ -140,7 +130,7 @@ export default async function OpportunityReviewPage({
                 Original announcement
               </a>
               <p className="mt-2 text-xs text-gray-500">
-                Discovered {new Date(opportunity.first_discovered_at).toISOString()}
+                Discovered {formatTimestamp(opportunity.first_discovered_at)}
                 {" · Verified fields: "}
                 {Array.isArray(opportunity.verified_fields)
                   ? opportunity.verified_fields.join(", ") || "none"
@@ -170,12 +160,45 @@ export default async function OpportunityReviewPage({
                           evidence
                         </a>
                         {" · "}
-                        {new Date(item.reviewed_at).toISOString()}
+                        {formatTimestamp(item.reviewed_at)}
                       </li>
                     ))}
                   </ul>
                 </details>
               ) : null}
+
+              <form
+                action={updateOpportunityLifecycle}
+                className="mt-5 flex flex-wrap items-end gap-3 border-t pt-5"
+              >
+                <input type="hidden" name="opportunityId" value={opportunity.id} />
+                <label className="text-sm font-medium text-gray-700">
+                  Lifecycle decision
+                  <select
+                    name="lifecycle"
+                    required
+                    className="mt-1 rounded-md border px-3 py-2"
+                  >
+                    <option value="active">Active</option>
+                    <option value="closing_soon">Closing soon</option>
+                    <option value="expired">Expired</option>
+                    <option value="postponed">Postponed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </label>
+                <label className="min-w-60 flex-1 text-sm font-medium text-gray-700">
+                  Reason (recorded in history)
+                  <input
+                    name="reason"
+                    required
+                    maxLength={500}
+                    className="mt-1 w-full rounded-md border px-3 py-2"
+                  />
+                </label>
+                <button className="rounded-md border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50">
+                  Record lifecycle
+                </button>
+              </form>
 
               <form
                 action={reviewOpportunityEvidence}

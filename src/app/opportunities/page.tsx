@@ -14,8 +14,42 @@ import {
 } from "@/lib/opportunities/intelligence";
 import { OPPORTUNITY_VERIFIED_FIELDS } from "@/lib/opportunities/schema";
 import { createClient } from "@/lib/firebase/server";
+import {
+  OPPORTUNITY_CATEGORY_IDS,
+  type OpportunityCategoryId,
+} from "@/lib/opportunities/taxonomy";
+import type { OpportunityViewId } from "@/lib/opportunities/taxonomy";
 
 export const dynamic = "force-dynamic";
+
+type OpportunitiesPageProps = {
+  searchParams: Promise<{ view?: string; category?: string }>;
+};
+
+const viewIds: OpportunityViewId[] = [
+  "all",
+  "recommended",
+  "closing_soon",
+  "upcoming",
+  "verified",
+  "saved",
+  "applied",
+  "expired",
+];
+
+function initialView(value: string | undefined): OpportunityViewId {
+  return viewIds.includes(value as OpportunityViewId)
+    ? value as OpportunityViewId
+    : "all";
+}
+
+function initialCategory(
+  value: string | undefined,
+): OpportunityCategoryId | "all" {
+  return OPPORTUNITY_CATEGORY_IDS.includes(value as OpportunityCategoryId)
+    ? value as OpportunityCategoryId
+    : "all";
+}
 
 const verificationStatuses = [
   "discovered",
@@ -231,7 +265,10 @@ function getProfile(
   };
 }
 
-export default async function OpportunitiesPage() {
+export default async function OpportunitiesPage({
+  searchParams,
+}: OpportunitiesPageProps) {
+  const params = await searchParams;
   const firebaseStore = await createClient();
   const { data: claimsData, error: claimsError } =
     await firebaseStore.auth.getClaims();
@@ -250,7 +287,7 @@ export default async function OpportunitiesPage() {
     firebaseStore
       .from("opportunities")
       .select(
-        "id,canonical_url,title,organizer,short_description,category,primary_domain,additional_domains,required_skills,participation_format,individual_eligible,team_eligible,minimum_team_size,maximum_team_size,eligible_education_levels,eligible_graduation_years,eligible_branches,eligible_countries,experience_restrictions,registration_closes_on,submission_deadline,entry_fee_amount,entry_fee_currency,certificate_available,travel_support,accommodation,food_provided,mentorship,networking,internship_pathway,job_pathway,official_application_url,eligibility_conflicts,verified_fields,verification_status,lifecycle_status",
+        "id,canonical_url,title,organizer,company,institution,short_description,category,subcategory,primary_domain,additional_domains,required_skills,geography,location,participation_format,individual_eligible,team_eligible,minimum_team_size,maximum_team_size,eligible_education_levels,eligible_graduation_years,eligible_branches,eligible_countries,experience_restrictions,registration_opens_on,registration_closes_on,submission_deadline,entry_fee_amount,entry_fee_currency,certificate_available,travel_support,accommodation,food_provided,mentorship,networking,internship_pathway,job_pathway,official_application_url,eligibility_conflicts,verified_fields,verification_status,lifecycle_status",
       )
       .order("registration_closes_on", {
         ascending: true,
@@ -359,8 +396,16 @@ export default async function OpportunitiesPage() {
       id: String(row.id),
       title: String(row.title ?? "Untitled opportunity"),
       organizer: nullableString(row.organizer),
+      company: nullableString(row.company),
+      institution: nullableString(row.institution),
       description: nullableString(row.short_description),
       category: nullableString(row.category),
+      subcategory: nullableString(row.subcategory),
+      geography: nullableString(row.geography),
+      location: nullableString(row.location),
+      registrationOpensOn: verifiedFields.includes("registrationOpensOn")
+        ? nullableDate(row.registration_opens_on)
+        : null,
       domains: [
         ...(verifiedFields.includes("primaryDomain") &&
         typeof row.primary_domain === "string"
@@ -540,20 +585,12 @@ export default async function OpportunitiesPage() {
             </p>
           ) : null}
 
-          {!loadError && items.length === 0 ? (
-            <div className="mt-8 rounded-xl border bg-white p-8 text-center">
-              <h2 className="text-xl font-semibold text-gray-900">
-                No verified opportunity leads yet
-              </h2>
-              <p className="mt-2 text-gray-600">
-                New source announcements appear here after collection and
-                verification. No sample opportunities are shown as real data.
-              </p>
-            </div>
-          ) : null}
-
-          {!loadError && items.length > 0 ? (
-            <OpportunityList items={items} />
+          {!loadError ? (
+            <OpportunityList
+              items={items}
+              initialView={initialView(params.view)}
+              initialCategory={initialCategory(params.category)}
+            />
           ) : null}
         </div>
       </main>

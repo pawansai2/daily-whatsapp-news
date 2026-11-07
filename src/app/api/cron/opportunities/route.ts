@@ -1,7 +1,10 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 
-import { runOpportunityDiscovery } from "@/lib/opportunities/discovery";
+import {
+  runOpportunityDiscovery,
+  runOpportunityDiscoveryDryRun,
+} from "@/lib/opportunities/discovery";
 import { refreshOpportunityLifecycle } from "@/lib/opportunities/lifecycle";
 import {
   getFirebaseAdminClient,
@@ -10,6 +13,7 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 function safeEqual(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(left, "utf8");
@@ -44,6 +48,26 @@ export async function GET(request: Request) {
   }
 
   const admin = getFirebaseAdminClient();
+  const dryRun = new URL(request.url).searchParams.get("dryRun") === "1";
+
+  if (dryRun) {
+    try {
+      const result = await runOpportunityDiscoveryDryRun(admin);
+      return NextResponse.json(result, {
+        status: result.status === "failed" ? 502 : 200,
+        headers: { "Cache-Control": "no-store" },
+      });
+    } catch (error) {
+      console.error("opportunity_dry_run_failed", {
+        message: error instanceof Error ? error.message : "unknown",
+      });
+      return NextResponse.json(
+        { error: "Opportunity dry run could not be completed." },
+        { status: 500, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+  }
+
   try {
     const result = await runOpportunityDiscovery(admin);
     let lifecycleUpdated: number;

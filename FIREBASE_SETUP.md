@@ -76,3 +76,12 @@ must use the verified Firebase UID in their ownership fields.
 `src/lib/firebase/admin.ts` initializes the Admin SDK.
 `src/lib/firebase/server.ts` verifies server sessions and exposes the
 server-only Firestore data client.
+
+## Vercel runtime dependency note
+
+`firebase-admin@14` depends on `jwks-rsa@4`, which loads the ESM-only `jose@6`
+with CommonJS `require()`. Vercel's serverless runtime loads `firebase-admin`
+as an external CommonJS module, so that import fails with `ERR_REQUIRE_ESM` and
+every Auth route breaks. `package.json` therefore pins `jose` to `4.15.9` via
+`overrides`. Do not remove this override while `firebase-admin` remains on v14;
+re-test Production sign-in before changing either package.

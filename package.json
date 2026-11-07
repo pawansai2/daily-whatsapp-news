@@ -23,7 +23,8 @@
         "zod": "latest"
     },
     "overrides": {
-        "@grpc/grpc-js": "^1.14.7"
+        "@grpc/grpc-js": "^1.14.7",
+        "jose": "4.15.9"
     },
     "devDependencies": {
         "@tailwindcss/postcss": "^4.3.3",

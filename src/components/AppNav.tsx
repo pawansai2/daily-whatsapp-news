@@ -59,6 +59,13 @@ export function AppNav() {
         </Link>
 
         <Link
+          href="/settings#notifications"
+          className="rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+        >
+          Notifications
+        </Link>
+
+        <Link
           href="/settings"
           className="rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
         >

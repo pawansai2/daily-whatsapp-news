@@ -1,32 +1,65 @@
 # Opportunity Radar implementation status
 
-**Status date:** 2026-11-06  
-**Scope:** Repository implementation and local validation only. No database migration or production operation was performed.
+**Status date:** 2026-11-07
+**Scope:** Repository implementation, local validation, and live production verification.
 
-## Implemented in the working tree
+## Implemented and verified
 
-- Official RSS/Atom source registry and source-isolated discovery, canonicalization, duplicate protection, and collection run history.
-- Additive Supabase schema for canonical opportunities, source provenance, field evidence, changes, user profiles, tracking, and notification preferences.
-- Profile-based eligibility evaluation and explainable scoring; unknown facts remain unknown rather than being inferred.
-- Authenticated opportunity browsing, profile editing, and private saved/applied tracking.
-- Reviewer allowlist and field-by-field manual verification with HTTPS source citation, excerpt, and review history. Individual facts may be partially verified; whole-opportunity official verification is intentionally not exposed.
-- Verified, eligible opportunity matches in the daily Telegram digest, including opportunity-only messages and a fallback when news retrieval fails.
+- Canonical nine-category opportunity taxonomy with subcategories and nine technical-domain groups.
+- Deterministic, source-hint-aware classification of leads; unknown category/domain stays `null` rather than being invented.
+- Unified discovery views (All, Recommended, Closing Soon, Upcoming, Verified, Saved, Applied, Expired/Cancelled) and category views with counts.
+- Extended filters: technical domain, format, geography, entry fee, deadline window, eligibility, verification, tracking, and search across organizer/company/institution.
+- Dashboard Opportunity Radar summary with category counts and view links.
+- Idempotent default source seeding for a Firestore registry that has no sources.
+- Official RSS/Atom source registry, source-isolated discovery, canonicalization, duplicate protection, and collection-run history.
+- Evidence-gated Opportunity Radar: field-level reviewer verification, change history, profile-based eligibility, and explainable scoring. Unknown facts remain unknown.
+- Authenticated browsing, profile editing, and private saved/applied tracking.
+- Firebase Authentication (email/password) with HTTP-only session cookies and Firebase Admin–backed server access.
+- Firestore persistence for settings, interests, delivery records, inbound messages, Telegram channels and link tokens, opportunity profiles/tracking, sources, evidence, changes, and collection runs.
+- Firestore client rules deny-all (verified live).
+- Telegram linking, per-user test delivery, and verified-opportunity digest inclusion.
 - Lifecycle refresh based only on verified dates.
-- GitHub Actions schedule definitions for discovery and due digest dispatch.
+- GitHub Actions schedules for discovery and digest dispatch.
+- One-time, dry-run-first Supabase → Firestore importer.
+- Lazy Firebase server client initialization so unauthenticated requests are rejected before privileged initialization.
+- CommonJS-compatible `jose@4.15.9` override for `firebase-admin` on the Vercel runtime.
+
+## Deployment
+
+- Production: `https://daily-whatsapp-news-3d5j.vercel.app` — deployed 2026-11-07, alias updated.
+- Verified: sign-in, session creation, Firestore reads, settings write, protected-route redirects, deny-all client rules, unauthorized cron rejection.
+- Runtime logs: no Firebase errors after the fix.
 
 ## Not implemented or not proven
 
-- Database migrations have not been applied; the production schema, RLS policies, and stored function are not live-validated.
-- No live RSS source collection, Telegram Bot API send, GitHub Actions schedule, staging deployment, or production deployment was verified.
-- No automatic source verification, web scraping, immediate deadline/change alerts, cross-source fuzzy merge, or active alert retry worker is provided.
-- `officially_verified` for an entire opportunity is not assigned by the reviewer UI; field-level partial verification can qualify only if the eligibility evaluator has sufficient verified data.
-- Email, reviewer UUID, and Telegram bot environment configuration are documented by variable name only and have not been verified.
+- Source coverage outside research/funding is not yet approved. Hackathons, ideathons, competitions, events, internships, jobs, and startup programmes need reviewed official feeds before they can populate; no feed URLs were guessed.
+- Classification is an unverified lead, not a confirmed fact.
 
-## Operational blockers
+- Telegram linking and delivery have not been exercised live.
+- User isolation has not been tested with two accounts.
+- Opportunity save/apply and digest eligibility have not been exercised against real opportunity data (Firestore contains no opportunities).
+- The Supabase migrations were never applied; the SQL is historical source definition only. The one-time data import has not run.
+- GitHub Actions has no repository secrets (`APP_BASE_URL`, `CRON_SECRET`) and has never run.
+- Development-scope Vercel variables are not configured.
+- No reviewer account is configured for `/admin/opportunities`.
+- Immediate deadline/change alerts, automatic web verification, and cross-source fuzzy merge are not provided.
 
-- The local Supabase CLI could not connect because Docker Desktop's Linux engine was unavailable.
-- A production or staging target and backup strategy have not been approved. Do not apply migrations without those prerequisites.
-- GitHub scheduled workflows require `APP_BASE_URL` and `CRON_SECRET` repository secrets, and must be installed on the default branch before they can run.
-- Live Telegram validation requires an explicitly configured test bot and destination; never paste credentials into chat or commit them.
+## Required owner actions
 
-See [database validation](./OPPORTUNITY_RADAR_DATABASE_VALIDATION.md), [verification workflow](./OPPORTUNITY_RADAR_VERIFICATION.md), [Telegram validation](./OPPORTUNITY_RADAR_TELEGRAM_VALIDATION.md), [scheduler](./OPPORTUNITY_RADAR_SCHEDULER.md), [deployment](./OPPORTUNITY_RADAR_DEPLOYMENT.md), and [test report](./OPPORTUNITY_RADAR_TEST_REPORT.md).
+1. Rotate the service-account key because it was shared in the chat transcript; update `FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON` in Vercel and redeploy.
+2. Set GitHub Actions repository secrets and run both workflows manually.
+3. Configure reviewer emails/IDs.
+4. Validate Telegram with an approved test destination.
+5. Run the Supabase → Firestore import only after confirming a backup and source counts.
+
+## Related documents
+
+- [Scope alignment](./OPPORTUNITY_RADAR_SCOPE_ALIGNMENT.md)
+- [Firebase + Vercel audit](./OPPORTUNITY_RADAR_FIREBASE_VERCEL_AUDIT.md)
+- [Firebase validation](./OPPORTUNITY_RADAR_FIREBASE_VALIDATION.md)
+- [Database validation](./OPPORTUNITY_RADAR_DATABASE_VALIDATION.md)
+- [Vercel deployment](./OPPORTUNITY_RADAR_VERCEL_DEPLOYMENT.md)
+- [Test report](./OPPORTUNITY_RADAR_TEST_REPORT.md)
+- [Scheduler](./OPPORTUNITY_RADAR_SCHEDULER.md)
+- [Telegram validation](./OPPORTUNITY_RADAR_TELEGRAM_VALIDATION.md)
+- [Firebase setup](./FIREBASE_SETUP.md)

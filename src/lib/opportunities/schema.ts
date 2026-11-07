@@ -62,6 +62,15 @@ export type OpportunityDigestItem = {
   deadline: string | null;
   score: number;
   eligibilityStatus: "eligible" | "likely_eligible";
+  organizer?: string | null;
+  category?: string | null;
+  domain?: string | null;
+  verificationStatus?: string | null;
+  format?: string | null;
+  fee?: string | null;
+  participation?: string | null;
+  benefits?: string[];
+  reasons?: string[];
 };
 
 const httpsUrl = z
@@ -89,9 +98,12 @@ export const OpportunityDraftSchema = z.object({
   canonicalUrlHash: z.string().regex(/^[0-9a-f]{64}$/),
   title: z.string().trim().min(1).max(500),
   organizer: z.string().trim().max(300).nullable().optional(),
+  company: z.string().trim().max(300).nullable().optional(),
+  institution: z.string().trim().max(300).nullable().optional(),
   shortDescription: z.string().max(2000).nullable().optional(),
   fullDescription: z.string().max(50000).nullable().optional(),
   category: z.string().trim().max(100).nullable().optional(),
+  subcategory: z.string().trim().max(100).nullable().optional(),
   primaryDomain: z.string().trim().max(100).nullable().optional(),
   additionalDomains: nullableTextList,
   requiredSkills: nullableTextList,

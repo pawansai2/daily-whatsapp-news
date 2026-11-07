@@ -174,7 +174,7 @@ export async function getOpportunityDigestItems(
   const { data: rawOpportunities, error: opportunityError } = await admin
     .from("opportunities")
     .select(
-      "id,title,category,primary_domain,additional_domains,required_skills,participation_format,individual_eligible,team_eligible,minimum_team_size,maximum_team_size,eligible_education_levels,eligible_graduation_years,eligible_branches,eligible_countries,experience_restrictions,registration_closes_on,submission_deadline,entry_fee_amount,entry_fee_currency,certificate_available,travel_support,accommodation,food_provided,mentorship,networking,internship_pathway,job_pathway,eligibility_conflicts,verified_fields,verification_status,lifecycle_status",
+      "id,title,organizer,category,primary_domain,additional_domains,required_skills,participation_format,individual_eligible,team_eligible,minimum_team_size,maximum_team_size,eligible_education_levels,eligible_graduation_years,eligible_branches,eligible_countries,experience_restrictions,registration_closes_on,submission_deadline,entry_fee_amount,entry_fee_currency,certificate_available,travel_support,accommodation,food_provided,mentorship,networking,internship_pathway,job_pathway,eligibility_conflicts,verified_fields,verification_status,lifecycle_status",
     )
     .in("verification_status", [
       "officially_verified",
@@ -260,6 +260,27 @@ export async function getOpportunityDigestItems(
       : verified.includes("submissionDeadline")
         ? facts.submissionDeadline ?? null
         : null;
+    const fee = verified.includes("entryFeeAmount") &&
+      facts.entryFeeAmount != null
+      ? `${facts.entryFeeAmount} ${facts.entryFeeCurrency ?? "(currency unknown)"}`
+      : null;
+    const participation = verified.includes("individualEligible") &&
+      verified.includes("teamEligible")
+      ? facts.individualEligible && facts.teamEligible
+        ? "Individual or team"
+        : facts.individualEligible
+          ? "Individual"
+          : facts.teamEligible
+            ? "Team"
+            : "Not specified"
+      : null;
+    const benefits = [
+      facts.certificateAvailable ? "certificate" : null,
+      facts.mentorship ? "mentorship" : null,
+      facts.networking ? "networking" : null,
+      facts.travelSupport ? "travel support" : null,
+    ].filter((value): value is string => value !== null);
+
     results.push({
       id,
       title: facts.title,
@@ -267,6 +288,17 @@ export async function getOpportunityDigestItems(
       deadline,
       score: score.score,
       eligibilityStatus: eligibility.status,
+      organizer: nullableString(row.organizer),
+      category: facts.category,
+      domain: facts.primaryDomain,
+      verificationStatus: facts.verificationStatus,
+      format: verified.includes("participationFormat")
+        ? facts.participationFormat
+        : null,
+      fee,
+      participation,
+      benefits,
+      reasons: score.reasons.slice(0, 2),
     });
   }
 

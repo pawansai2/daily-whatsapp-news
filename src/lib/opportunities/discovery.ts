@@ -1,6 +1,11 @@
 import type { FirebaseDataClient } from "@/lib/firebase/store";
 
 import {
+  DEFAULT_OPPORTUNITY_SOURCES,
+  ensureDefaultOpportunitySources,
+} from "@/lib/opportunities/sources";
+import { fetchApiCandidates } from "@/lib/opportunities/api";
+import {
   entryToCandidate,
   fetchRssSource,
   isLikelySameOpportunity,
@@ -17,6 +22,8 @@ type CollectionSummary = {
   recordsSeen: number;
   recordsAdded: number;
   errorCount: number;
+  skipped?: boolean;
+  reason?: string;
 };
 
 type OpportunityRow = {
@@ -81,8 +88,36 @@ function toComparableOpportunity(
 
 async function findExistingOpportunity(
   admin: FirebaseDataClient,
+  source: OpportunitySource,
   candidate: OpportunityCandidate,
 ): Promise<OpportunityRow | null> {
+  const { data: provenance, error: provenanceError } = await admin
+    .from("opportunity_source_records")
+    .select("opportunity_id")
+    .eq("source_id", source.id)
+    .eq("source_record_key", candidate.sourceRecordKey)
+    .maybeSingle();
+
+  if (provenanceError) {
+    throw new Error(`Opportunity provenance lookup failed: ${provenanceError.code}`);
+  }
+
+  if (provenance && typeof provenance.opportunity_id === "string") {
+    const { data: linked, error: linkedError } = await admin
+      .from("opportunities")
+      .select(
+        "id,title,organizer,category,submission_deadline,registration_closes_on",
+      )
+      .eq("id", provenance.opportunity_id)
+      .maybeSingle();
+
+    if (linkedError) {
+      throw new Error(`Opportunity provenance record lookup failed: ${linkedError.code}`);
+    }
+
+    if (linked) return linked as OpportunityRow;
+  }
+
   const { data: exact, error: exactError } = await admin
     .from("opportunities")
     .select(
@@ -103,29 +138,56 @@ async function findExistingOpportunity(
   }
 
   const organizer = candidate.opportunity.organizer;
-  if (!organizer) {
-    return null;
-  }
-
-  const { data: sameOrganizer, error: organizerError } = await admin
+  const category = candidate.opportunity.category;
+  let query = admin
     .from("opportunities")
     .select(
       "id,title,organizer,category,submission_deadline,registration_closes_on",
-    )
-    .eq("organizer", organizer)
-    .limit(50);
+    );
 
-  if (organizerError) {
-    throw new Error(`Opportunity duplicate lookup failed: ${organizerError.code}`);
+  if (organizer) {
+    query = query.eq("organizer", organizer);
+  } else if (category) {
+    query = query.eq("category", category);
+  } else {
+    query = query.order("updated_at", { ascending: false });
   }
 
-  return ((sameOrganizer ?? []) as OpportunityRow[])
-    .find((row) =>
-      isLikelySameOpportunity(
+  const { data: candidates, error: duplicateError } = await query.limit(100);
+
+  if (duplicateError) {
+    throw new Error(`Opportunity duplicate lookup failed: ${duplicateError.code}`);
+  }
+
+  for (const row of (candidates ?? []) as OpportunityRow[]) {
+    if (
+      !isLikelySameOpportunity(
         candidate.opportunity,
         toComparableOpportunity(row),
-      ),
-    ) ?? null;
+      )
+    ) {
+      continue;
+    }
+
+    const { data: sameSource, error: sameSourceError } = await admin
+      .from("opportunity_source_records")
+      .select("id")
+      .eq("opportunity_id", row.id)
+      .eq("source_id", source.id)
+      .limit(1);
+
+    if (sameSourceError) {
+      throw new Error(`Opportunity source provenance lookup failed: ${sameSourceError.code}`);
+    }
+
+    // Different records from the same source are distinct opportunities even
+    // when their titles share a generic prefix (for example Codeforces rounds).
+    if ((sameSource ?? []).length > 0) continue;
+
+    return row;
+  }
+
+  return null;
 }
 
 async function persistCandidate(
@@ -134,7 +196,7 @@ async function persistCandidate(
   candidate: OpportunityCandidate,
   checkedAt: string,
 ): Promise<boolean> {
-  let existing = await findExistingOpportunity(admin, candidate);
+  let existing = await findExistingOpportunity(admin, source, candidate);
   let opportunityId = existing?.id;
   let created = false;
 
@@ -147,6 +209,9 @@ async function persistCandidate(
         canonical_url_hash: opportunity.canonicalUrlHash,
         title: opportunity.title,
         organizer: opportunity.organizer ?? null,
+        company: opportunity.company ?? null,
+        institution: opportunity.institution ?? null,
+        subcategory: opportunity.subcategory ?? null,
         short_description: opportunity.shortDescription ?? null,
         full_description: opportunity.fullDescription ?? null,
         category: opportunity.category ?? null,
@@ -196,6 +261,7 @@ async function persistCandidate(
         verification_status: opportunity.verificationStatus,
         lifecycle_status: opportunity.lifecycleStatus,
         data_completeness: opportunity.dataCompleteness ?? null,
+        first_discovered_at: checkedAt,
         last_checked_at: checkedAt,
         updated_at: checkedAt,
       })
@@ -203,7 +269,7 @@ async function persistCandidate(
       .single();
 
     if (insertError?.code === "23505") {
-      existing = await findExistingOpportunity(admin, candidate);
+      existing = await findExistingOpportunity(admin, source, candidate);
       opportunityId = existing?.id;
     } else if (insertError) {
       throw new Error(`Opportunity insert failed: ${insertError.code}`);
@@ -284,11 +350,161 @@ async function updateSourceHealth(
   }
 }
 
+export type DiscoveryDryRunCandidate = {
+  sourceId: string;
+  sourceName: string;
+  sourceType: string;
+  title: string;
+  url: string;
+  category: string | null;
+  domains: string[];
+  extractedFields: string[];
+  canonicalUrl: string;
+  publishedAt: string | null;
+};
+
+export type DiscoveryDryRunResult = {
+  status: "succeeded" | "partial" | "failed";
+  sourcesAttempted: number;
+  recordsSeen: number;
+  candidates: DiscoveryDryRunCandidate[];
+  errors: Array<{ sourceId: string; code: string }>;
+  persisted: 0;
+};
+
+/**
+ * Fetches and normalizes real sources without creating runs, opportunities or
+ * provenance records. This is the safe way to validate extraction quality
+ * before enabling persistence.
+ */
+export async function runOpportunityDiscoveryDryRun(
+  admin: FirebaseDataClient,
+  now: Date = new Date(),
+  fetcher: typeof fetch = fetch,
+  candidateLimit = 100,
+): Promise<DiscoveryDryRunResult> {
+  void now;
+  const { data: rawSources, error } = await admin
+    .from("opportunity_sources")
+    .select(
+      "id,name,category,base_url,source_type,collection_method,supported_categories,supported_domains,rate_limit_seconds,last_succeeded_at,consecutive_failures,is_enabled",
+    )
+    .eq("is_enabled", true)
+    .order("name", { ascending: true });
+
+  if (error) {
+    throw new Error(`Source registry could not be loaded: ${error.code}`);
+  }
+
+  const configured = (rawSources ?? []) as OpportunitySourceRow[];
+  const sources: OpportunitySource[] = configured.length > 0
+    ? configured
+    : DEFAULT_OPPORTUNITY_SOURCES.map((source, index) => ({
+        ...source,
+        id: `default-${index + 1}`,
+        supported_categories: [...source.supported_categories],
+        supported_domains: [...source.supported_domains],
+        last_succeeded_at: null,
+        consecutive_failures: 0,
+      }));
+
+  const candidates: DiscoveryDryRunCandidate[] = [];
+  const errors: Array<{ sourceId: string; code: string }> = [];
+  let recordsSeen = 0;
+
+  for (const source of sources) {
+    try {
+      const entries = await fetchRssSource(source, fetcher);
+      recordsSeen += entries.length;
+
+      for (const entry of entries) {
+        if (candidates.length >= candidateLimit) break;
+        const candidate = entryToCandidate(source, entry);
+        if (!candidate) continue;
+        const opportunity = candidate.opportunity;
+        candidates.push({
+          sourceId: source.id,
+          sourceName: source.name,
+          sourceType: source.source_type,
+          title: opportunity.title,
+          url: candidate.sourceUrl,
+          category: opportunity.category ?? null,
+          domains: [
+            ...(opportunity.primaryDomain ? [opportunity.primaryDomain] : []),
+            ...(opportunity.additionalDomains ?? []),
+          ],
+          extractedFields: [
+            "title",
+            "description",
+            ...(opportunity.category ? ["category"] : []),
+            ...(opportunity.primaryDomain ? ["primaryDomain"] : []),
+            ...(opportunity.participationFormat ? ["participationFormat"] : []),
+            ...(opportunity.minimumTeamSize != null ||
+            opportunity.maximumTeamSize != null
+              ? ["teamSize"]
+              : []),
+            ...(opportunity.entryFeeAmount != null ? ["entryFee"] : []),
+            ...(opportunity.individualEligible != null
+              ? ["individualEligible"]
+              : []),
+            ...(opportunity.teamEligible != null ? ["teamEligible"] : []),
+          ],
+          canonicalUrl: opportunity.canonicalUrl,
+          publishedAt: candidate.evidence.publishedAt,
+        });
+      }
+    } catch (sourceError) {
+      errors.push({ sourceId: source.id, code: sourceErrorCode(sourceError) });
+    }
+  }
+
+  return {
+    status: errors.length === 0
+      ? "succeeded"
+      : candidates.length > 0
+        ? "partial"
+        : "failed",
+    sourcesAttempted: sources.length,
+    recordsSeen,
+    candidates,
+    errors,
+    persisted: 0,
+  };
+}
+
 export async function runOpportunityDiscovery(
   admin: FirebaseDataClient,
   now: Date = new Date(),
   fetcher: typeof fetch = fetch,
 ): Promise<CollectionSummary> {
+  const staleBefore = new Date(now.getTime() - 30 * 60 * 1000).toISOString();
+  const { data: activeRuns, error: activeRunError } = await admin
+    .from("collection_runs")
+    .select("id,started_at")
+    .eq("status", "running")
+    .gte("started_at", staleBefore)
+    .limit(1);
+
+  if (activeRunError) {
+    throw new Error(`Collection run lock lookup failed: ${activeRunError.code}`);
+  }
+
+  const activeRun = (activeRuns ?? [])[0];
+  if (activeRun && typeof activeRun.id === "string") {
+    return {
+      runId: activeRun.id,
+      status: "partial",
+      sourcesAttempted: 0,
+      recordsSeen: 0,
+      recordsAdded: 0,
+      errorCount: 0,
+      skipped: true,
+      reason: "DISCOVERY_ALREADY_RUNNING",
+    };
+  }
+
+  await ensureDefaultOpportunitySources(admin);
+
   const checkedAt = now.toISOString();
   const { data: run, error: runError } = await admin
     .from("collection_runs")
@@ -384,40 +600,45 @@ export async function runOpportunityDiscovery(
       };
     }
 
-    const entries = await fetchRssSource(source, fetcher);
     let sourceAdded = 0;
     let sourceRejected = 0;
+    let sourceSeen = 0;
+    const candidates: OpportunityCandidate[] = [];
 
-    for (const entry of entries) {
-      try {
-        const candidate = entryToCandidate(source, entry);
-        if (candidate) {
+    if (source.collection_method === "api") {
+      const apiCandidates = await fetchApiCandidates(source, fetcher);
+      candidates.push(...apiCandidates);
+      sourceSeen = apiCandidates.length;
+    } else {
+      const entries = await fetchRssSource(source, fetcher);
+      sourceSeen = entries.length;
+
+      for (const entry of entries) {
+        try {
+          const candidate = entryToCandidate(source, entry);
+          if (candidate) candidates.push(candidate);
+        } catch (error) {
           if (
-            await persistCandidate(
-              admin,
-              source,
-              candidate,
-              checkedAt,
-            )
+            error instanceof SourceCollectionError &&
+            error.code === "SOURCE_INVALID_RSS"
           ) {
-            sourceAdded += 1;
+            sourceRejected += 1;
+            console.error("opportunity_entry_rejected", {
+              runId,
+              sourceId: source.id,
+              code: error.code,
+            });
+            continue;
           }
-        }
-      } catch (error) {
-        if (
-          error instanceof SourceCollectionError &&
-          error.code === "SOURCE_INVALID_RSS"
-        ) {
-          sourceRejected += 1;
-          console.error("opportunity_entry_rejected", {
-            runId,
-            sourceId: source.id,
-            code: error.code,
-          });
-          continue;
-        }
 
-        throw error;
+          throw error;
+        }
+      }
+    }
+
+    for (const candidate of candidates) {
+      if (await persistCandidate(admin, source, candidate, checkedAt)) {
+        sourceAdded += 1;
       }
     }
 
@@ -426,7 +647,7 @@ export async function runOpportunityDiscovery(
       .update({
         status: "succeeded",
         completed_at: checkedAt,
-        records_seen: entries.length,
+        records_seen: sourceSeen,
         records_added: sourceAdded,
         records_rejected: sourceRejected,
       })
@@ -440,7 +661,7 @@ export async function runOpportunityDiscovery(
     await updateSourceHealth(admin, source, true, checkedAt);
 
     return {
-      recordsSeen: entries.length,
+      recordsSeen: sourceSeen,
       recordsAdded: sourceAdded,
       recordsRejected: sourceRejected,
     };

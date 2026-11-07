@@ -232,6 +232,9 @@ export default async function SettingsPage({
           </select>
         </div>
 
+        <section id="notifications" className="scroll-mt-6 space-y-6 rounded-md border border-gray-200 p-4">
+          <h2 className="text-lg font-semibold text-gray-900">Notifications</h2>
+
         <div>
           <label
             htmlFor="delivery_time"
@@ -271,6 +274,7 @@ export default async function SettingsPage({
             className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900"
           />
         </div>
+        </section>
 
         <div>
           <label
@@ -303,7 +307,7 @@ export default async function SettingsPage({
           />
 
           <span className="text-sm font-medium text-gray-700">
-            Enable daily news digest
+            Enable daily digest (news and opportunity matches)
           </span>
         </label>
 

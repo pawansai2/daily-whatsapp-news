@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
 import { XMLParser } from "fast-xml-parser";
 
+import { extractOpportunityFacts } from "@/lib/opportunities/extraction";
 import {
   OpportunityDraftSchema,
   type OpportunityDraft,
 } from "@/lib/opportunities/schema";
+import { classifyOpportunity } from "@/lib/opportunities/taxonomy";
 
 export type OpportunitySource = {
   id: string;
@@ -83,6 +85,18 @@ const parser = new XMLParser({
 
 const opportunityCue =
   /\b(?:accelerator|application(?:s)?|apply(?:\s+now)?|award|challenge|competition|contest|fellowship|funding|grant(?:s)?|hackathon|incubator|internship|scholarship|submission|entrepreneurship\s+program|call\s+for\s+(?:applications|proposals|entries))\b/i;
+
+const employmentCue =
+  /\b(?:engineer|developer|designer|architect|manager|analyst|scientist|administrator|consultant|specialist|technician|lead|intern)\b/i;
+
+function hasOpportunityCue(
+  source: OpportunitySource,
+  text: string,
+): boolean {
+  if (opportunityCue.test(text)) return true;
+  return source.supported_categories.includes("employment") &&
+    employmentCue.test(text);
+}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null
@@ -432,11 +446,22 @@ export function entryToCandidate(
   entry: RssEntry,
 ): OpportunityCandidate | null {
   const searchableText = `${entry.title} ${entry.description}`;
-  if (!opportunityCue.test(searchableText)) {
+  if (!hasOpportunityCue(source, searchableText)) {
     return null;
   }
 
   const canonicalUrl = canonicalizeOpportunityUrl(entry.url);
+  const classification = classifyOpportunity({
+    title: entry.title,
+    description: entry.description,
+    sourceCategoryHints: source.supported_categories,
+    sourceDomainHints: source.supported_domains,
+  });
+
+  const extracted = extractOpportunityFacts({
+    title: entry.title,
+    description: entry.description,
+  });
 
   const result = OpportunityDraftSchema.safeParse({
     canonicalUrl,
@@ -444,14 +469,11 @@ export function entryToCandidate(
       fingerprintOpportunityUrl(canonicalUrl),
     title: entry.title,
     shortDescription: entry.description || null,
-    category:
-      source.supported_categories.length === 1
-        ? source.supported_categories[0]
-        : null,
-    primaryDomain:
-      source.supported_domains.length === 1
-        ? source.supported_domains[0]
-        : null,
+    category: classification.category,
+    subcategory: classification.subcategory,
+    primaryDomain: classification.domains[0] ?? null,
+    additionalDomains: classification.domains.slice(1),
+    ...extracted,
     verificationStatus: "pending_verification",
     lifecycleStatus: "unknown",
   });
@@ -491,6 +513,15 @@ function titleSimilarity(left: string, right: string): number {
     return 0;
   }
 
+  const smaller = leftWords.size <= rightWords.size ? leftWords : rightWords;
+  const larger = smaller === leftWords ? rightWords : leftWords;
+  if (
+    smaller.size >= 3 &&
+    Array.from(smaller).every((word) => larger.has(word))
+  ) {
+    return 1;
+  }
+
   const intersection = Array.from(leftWords)
     .filter((word) => rightWords.has(word)).length;
   const union = new Set([...leftWords, ...rightWords]).size;
@@ -526,12 +557,13 @@ export function isLikelySameOpportunity(
     | "registrationClosesOn"
   >,
 ): boolean {
+  const bothOrganizersKnown = Boolean(incoming.organizer && existing.organizer);
   if (
-    !incoming.organizer ||
-    !existing.organizer ||
-    normalizeComparisonText(incoming.organizer) !==
-      normalizeComparisonText(existing.organizer) ||
-    titleSimilarity(incoming.title, existing.title) < 0.92
+    (bothOrganizersKnown &&
+      normalizeComparisonText(incoming.organizer!) !==
+        normalizeComparisonText(existing.organizer!)) ||
+    titleSimilarity(incoming.title, existing.title) <
+      (bothOrganizersKnown ? 0.92 : 0.85)
   ) {
     return false;
   }

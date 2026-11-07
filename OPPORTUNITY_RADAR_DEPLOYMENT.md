@@ -1,35 +1,49 @@
 # Opportunity Radar deployment checklist
 
+**Status date:** 2026-11-07
+
 ## Current state
 
-Implementation files and schedule definitions are in the local working tree. No migration was applied, no deployment was performed, and no remote scheduler or Telegram operation was tested.
+The repaired application is deployed to Vercel Production at `https://daily-whatsapp-news-3d5j.vercel.app`. Sign-in, session creation, Firestore reads, and a settings write are verified. The original production failure was `ERR_REQUIRE_ESM` from `firebase-admin@14` → `jwks-rsa@4` → ESM-only `jose@6`; it is fixed by the `jose@4.15.9` override in `package.json`.
 
-## App configuration
+Remaining: GitHub Actions secrets are not configured and the workflows have never run; Telegram and multi-user isolation are untested; the Supabase import has not run.
 
-Configure through the hosting provider's secret/environment manager; do not commit values:
+See the detailed reports:
 
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-- `SUPABASE_SECRET_KEY`
+- [Firebase + Vercel audit](./OPPORTUNITY_RADAR_FIREBASE_VERCEL_AUDIT.md)
+- [Firebase validation](./OPPORTUNITY_RADAR_FIREBASE_VALIDATION.md)
+- [Vercel deployment status](./OPPORTUNITY_RADAR_VERCEL_DEPLOYMENT.md)
+- [Database validation](./OPPORTUNITY_RADAR_DATABASE_VALIDATION.md)
+- [Test report](./OPPORTUNITY_RADAR_TEST_REPORT.md)
+
+## Required configuration (names only)
+
+Configure through the hosting provider's secret/environment manager; never commit values:
+
+- `FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON` (server-only)
+- `NEXT_PUBLIC_FIREBASE_API_KEY`
+- `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
+- `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
+- `NEXT_PUBLIC_FIREBASE_APP_ID`
+- `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` (optional)
 - `CRON_SECRET`
-- `NEWS_DIGEST_ENABLED=true` when the shared daily dispatcher is approved for use
-- `TELEGRAM_BOT_TOKEN` for Telegram delivery
-- `OPPORTUNITY_REVIEWER_IDS` with approved authenticated user UUIDs, comma-separated
-- `APP_BASE_URL` for the scheduler workflow's GitHub Actions secret
+- `TELEGRAM_BOT_TOKEN` (when Telegram delivery is enabled)
+- `NEWS_DIGEST_ENABLED=true` when the dispatcher is approved for use
+- `OPPORTUNITY_REVIEWER_EMAILS` (preferred) and/or `OPPORTUNITY_REVIEWER_IDS`
+- `APP_BASE_URL` (GitHub Actions repository secret)
 
-Configure `NEWS_PROVIDER_MODE` and optional localization variables according to the existing digest deployment. No credentials were inspected or validated.
+The historical Supabase runtime variables are needed only for the one-time data import described in [FIREBASE_SETUP.md](./FIREBASE_SETUP.md).
 
-## Safe release sequence
+## Follow-up sequence
 
-1. Approve a staging project and backup/restore strategy.
-2. Validate migrations and RLS in an isolated database; see [database validation](./OPPORTUNITY_RADAR_DATABASE_VALIDATION.md).
-3. Deploy app code to staging, configure secrets, and confirm cron authentication rejects missing/invalid credentials.
-4. Test reviewer access with an allowlisted account and denial with a non-allowlisted account.
-5. Test one approved Telegram bot/chat, using a clear test destination and user-approved message.
-6. Install the two workflows on the default branch and configure repository secrets; verify a manual run and inspect app/Actions logs.
-7. Confirm a due digest and repeated invocation do not create duplicate deliveries before production rollout.
-8. Apply production migrations only after explicit approval and a verified backup. No production migration is authorized by this document.
+1. Rotate the service-account key (it was shared in chat), update the Vercel variable, and redeploy.
+2. Back up/export Firestore and record current collection counts before any migration.
+3. Configure GitHub Actions secrets `APP_BASE_URL` (production alias) and `CRON_SECRET`; run both workflows manually and inspect logs.
+4. Configure reviewer access, then verify evidence review with a non-allowlisted account denied.
+5. Verify one Telegram test destination with a user-approved message.
+6. Confirm repeated digest invocations do not duplicate deliveries.
+7. Run the Supabase import only after the source counts and destination backup are reviewed; verify UID ownership after import.
 
 ## Rollback and recovery
 
-If app deployment fails, revert the app deployment while preserving database state. If a migration has already been applied, do not drop tables as an automatic rollback: opportunity/evidence/profile data may exist. Restore from a verified backup or plan a reviewed forward fix. Pause schedules by disabling the workflows or set the approved app gate to false; verify the result in Actions and application logs.
+If a deployment fails, revert the Vercel deployment while preserving Firestore data. Do not drop collections as a rollback: opportunity evidence, profiles, and tracking data may exist. Restore from a verified export or plan a reviewed forward fix. Pause schedules by disabling the workflows or setting `NEWS_DIGEST_ENABLED=false`, then verify the result in Actions and application logs.

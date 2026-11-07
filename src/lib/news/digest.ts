@@ -122,12 +122,35 @@ export function buildTelegramDigestDetailed({
       const deadline = opportunity.deadline
         ? `Deadline: ${truncate(opportunity.deadline, 40)}`
         : "Deadline: unknown";
+      const context = [
+        opportunity.organizer,
+        opportunity.category,
+        opportunity.domain,
+        opportunity.verificationStatus?.replaceAll("_", " "),
+      ].filter(Boolean).join(" · ");
+      const access = [
+        opportunity.format ? `Format: ${opportunity.format}` : null,
+        opportunity.fee ? `Fee: ${opportunity.fee}` : "Fee: unknown",
+        opportunity.participation
+          ? `Participation: ${opportunity.participation}`
+          : null,
+      ].filter(Boolean).join(" · ");
+      const benefits = opportunity.benefits?.length
+        ? `  Benefits: ${truncate(opportunity.benefits.join(", "), 180)}`
+        : null;
+      const reasons = opportunity.reasons?.length
+        ? `  Why: ${truncate(opportunity.reasons.join(" "), 240)}`
+        : null;
       const entry = [
         `• ${truncate(opportunity.title, 140)} — ${opportunity.score}/100`,
+        context ? `  ${truncate(context, 220)}` : null,
         `  Eligibility: ${opportunity.eligibilityStatus.replaceAll("_", " ")} · ${deadline}`,
+        access ? `  ${access}` : null,
+        benefits,
+        reasons,
         `  Source: ${truncate(opportunity.sourceUrl, 500)}`,
         "",
-      ].join("\n");
+      ].filter((line): line is string => line !== null).join("\n");
       const projected = [
         ...sections,
         entry,
